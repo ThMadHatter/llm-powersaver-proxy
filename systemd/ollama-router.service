@@ -1,0 +1,22 @@
+[Unit]
+Description=Ollama Proxmox Router
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ollama-router
+Group=ollama-router
+WorkingDirectory=/opt/ollama-router
+EnvironmentFile=/opt/ollama-router/.env
+ExecStart=/opt/ollama-router/.venv/bin/uvicorn app.main:app --host ${LISTEN_HOST} --port ${LISTEN_PORT} --workers 1 --proxy-headers --forwarded-allow-ips=*
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ollama-router
+
+[Install]
+WantedBy=multi-user.target
