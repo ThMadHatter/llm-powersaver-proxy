@@ -45,7 +45,7 @@ Nel LXC:
 ```bash
 apt-get update && apt-get install -y git
 cd /opt
-https://github.com/ThMadHatter/llm-powersaver-proxy.git
+git clone https://github.com/ThMadHatter/llm-powersaver-proxy.git
 cd ollama-proxmox-router
 chmod +x scripts/*.sh
 ./scripts/install.sh
