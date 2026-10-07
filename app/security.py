@@ -1,7 +1,8 @@
 import secrets
-from fastapi import HTTPException, Request, status
-from .config import Settings
 
+from fastapi import HTTPException, Request, status
+
+from .config import Settings
 
 PUBLIC_PATHS = {"/", "/health/live", "/health/ready", "/docs", "/openapi.json", "/redoc"}
 

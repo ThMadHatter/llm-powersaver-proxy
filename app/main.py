@@ -48,7 +48,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def authentication(request: Request, call_next):
-        verify_router_key(request, settings)
+        try:
+            verify_router_key(request, settings)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
         return await call_next(request)
 
     async def upstream_ready(client: httpx.AsyncClient) -> bool:
