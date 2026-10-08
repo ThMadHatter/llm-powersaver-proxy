@@ -7,6 +7,21 @@ Controlla sul campo la validità dei parametri e la connettività verso i serviz
 import os
 import sys
 
+# Se eseguito con il Python di sistema privo di dipendenze (es. httpx),
+# individua il virtualenv locale (.venv) e riesegui lo script con quello.
+try:
+    import httpx
+except ImportError:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(script_dir, ".."))
+    venv_candidates = [
+        os.path.join(repo_root, ".venv", "bin", "python"),
+        os.path.join("/opt/ollama-router", ".venv", "bin", "python"),
+    ]
+    for venv_python in venv_candidates:
+        if os.path.exists(venv_python) and os.access(venv_python, os.X_OK):
+            os.execv(venv_python, [venv_python] + sys.argv)
+
 # Assicura che la directory radice sia nel sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

@@ -2,7 +2,8 @@
 
 .DEFAULT_GOAL := help
 
-PYTHON ?= python3
+# Individua l'interprete Python nell'ambiente virtuale se presente
+PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; elif [ -f /opt/ollama-router/.venv/bin/python ]; then echo /opt/ollama-router/.venv/bin/python; else echo python3; fi)
 
 help: ## Mostra questa guida di aiuto
 	@echo "Comandi disponibili:"
@@ -18,11 +19,11 @@ install: ## Esegue l'installer interattivo (richiede privilegi root)
 	./scripts/install.sh
 
 lint: ## Controlla lo stile e la sintassi del codice con Ruff
-	ruff check app tests scripts
+	$(PYTHON) -m ruff check app tests scripts
 
 format: ## Formatta il codice e corregge gli errori automatici con Ruff
-	ruff check --fix app tests scripts
-	ruff format app tests scripts
+	$(PYTHON) -m ruff check --fix app tests scripts
+	$(PYTHON) -m ruff format app tests scripts
 
 clean: ## Rimuove file temporanei e cache di Python/pytest
 	rm -rf .pytest_cache .venv build dist *.egg-info
