@@ -14,4 +14,8 @@ def verify_router_key(request: Request, settings: Settings) -> None:
     scheme, _, token = authorization.partition(" ")
     valid = scheme.lower() == "bearer" and secrets.compare_digest(token, settings.router_api_key)
     if not valid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key non valida", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key non valida",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

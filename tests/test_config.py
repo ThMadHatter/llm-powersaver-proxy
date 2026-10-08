@@ -44,3 +44,20 @@ def test_settings_short_api_key():
             proxmox_token_id="user@pve!token",
             proxmox_token_secret="secret",
         )
+
+
+def test_settings_custom_env_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("ROUTER_API_KEY", raising=False)
+    env_file = tmp_path / "custom.env"
+    env_file.write_text(
+        "ROUTER_API_KEY=custom_key_123456789\n"
+        "PROXMOX_NODE=gaming\n"
+        "PROXMOX_TOKEN_ID=user@pve!token\n"
+        "PROXMOX_TOKEN_SECRET=secret\n"
+    )
+    monkeypatch.setenv("ENV_FILE", str(env_file))
+
+    # Reload Settings using custom env file
+    settings = Settings(_env_file=str(env_file))
+    assert settings.proxmox_node == "gaming"
+    assert settings.router_api_key == "custom_key_123456789"

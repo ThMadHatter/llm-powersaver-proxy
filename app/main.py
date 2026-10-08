@@ -18,8 +18,16 @@ logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("ollama-router")
 
 HOP_BY_HOP = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailer", "transfer-encoding", "upgrade", "host", "content-length",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
 }
 
 
@@ -155,8 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=f"Connessione upstream fallita: {exc}") from exc
         response_headers = {
-            k: v for k, v in upstream.headers.items()
-            if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
+            k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
         }
         return StreamingResponse(
             upstream.aiter_raw(),

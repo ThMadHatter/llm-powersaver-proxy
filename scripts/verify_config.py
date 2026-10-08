@@ -70,7 +70,9 @@ def verify_config() -> bool:
 
     # 2. Controllo Proxmox VE
     print_step("Verifica connessione Proxmox API")
-    print(f"  Target: {settings.proxmox_base_url} (Node: {settings.proxmox_node}, Type: {settings.proxmox_vm_type}, VMID: {settings.proxmox_vmid})")
+    print(
+        f"  Target: {settings.proxmox_base_url} (Node: {settings.proxmox_node}, Type: {settings.proxmox_vm_type}, VMID: {settings.proxmox_vmid})"
+    )
 
     proxmox_client = ProxmoxClient(settings)
     try:
@@ -78,16 +80,18 @@ def verify_config() -> bool:
         with httpx.Client(
             timeout=settings.proxmox_timeout,
             verify=settings.proxmox_verify,
-            headers={
-                "Authorization": f"PVEAPIToken={settings.proxmox_token_id}={settings.proxmox_token_secret}"
-            },
+            headers={"Authorization": f"PVEAPIToken={settings.proxmox_token_id}={settings.proxmox_token_secret}"},
         ) as client:
             res = client.get(proxmox_client.status_url)
             if res.status_code == 200:
                 vm_status = res.json().get("data", {}).get("status", "sconosciuto")
-                print_success(f"Connessione a Proxmox API riuscita. Stato VM/CT #{settings.proxmox_vmid}: '{vm_status}'")
+                print_success(
+                    f"Connessione a Proxmox API riuscita. Stato VM/CT #{settings.proxmox_vmid}: '{vm_status}'"
+                )
             elif res.status_code in (401, 403):
-                print_error(f"Autenticazione Proxmox fallita (HTTP {res.status_code}). Verifica PROXMOX_TOKEN_ID e PROXMOX_TOKEN_SECRET.")
+                print_error(
+                    f"Autenticazione Proxmox fallita (HTTP {res.status_code}). Verifica PROXMOX_TOKEN_ID e PROXMOX_TOKEN_SECRET."
+                )
                 all_ok = False
             elif res.status_code == 404:
                 print_error(f"VM/CT #{settings.proxmox_vmid} non trovata sul nodo '{settings.proxmox_node}'.")
@@ -96,7 +100,9 @@ def verify_config() -> bool:
                 print_error(f"Risposta inattesa da Proxmox API (HTTP {res.status_code}): {res.text}")
                 all_ok = False
     except httpx.ConnectError:
-        print_error(f"Impossibile connettersi all'host Proxmox su {settings.proxmox_base_url}. Controlla IP, porta e rete.")
+        print_error(
+            f"Impossibile connettersi all'host Proxmox su {settings.proxmox_base_url}. Controlla IP, porta e rete."
+        )
         all_ok = False
     except httpx.HTTPError as exc:
         print_error(f"Errore durante la comunicazione con Proxmox: {exc}")
@@ -120,9 +126,13 @@ def verify_config() -> bool:
             if 200 <= res.status_code < 300:
                 print_success(f"Upstream raggiungibile ed operativo (HTTP {res.status_code}).")
             else:
-                print_warning(f"Upstream ha risposto con codice HTTP {res.status_code}. (Nota: Se la VM è attualmente spenta, questo è normale)")
+                print_warning(
+                    f"Upstream ha risposto con codice HTTP {res.status_code}. (Nota: Se la VM è attualmente spenta, questo è normale)"
+                )
     except httpx.ConnectError:
-        print_warning(f"Upstream non raggiungibile su {health_url}. (La VM/CT potrebbe essere attualmente spenta, verrà avviata al primo request)")
+        print_warning(
+            f"Upstream non raggiungibile su {health_url}. (La VM/CT potrebbe essere attualmente spenta, verrà avviata al primo request)"
+        )
     except httpx.HTTPError as exc:
         print_warning(f"Errore di rete/connessione verso Upstream: {exc}")
 
@@ -131,7 +141,9 @@ def verify_config() -> bool:
     if settings.gaming_mac:
         try:
             packet = magic_packet(settings.gaming_mac)
-            print_success(f"Sintassi MAC '{settings.gaming_mac}' valida (Magic Packet generato: {len(packet)} bytes). Broadcast target: {settings.gaming_broadcast}:{settings.gaming_wol_port}")
+            print_success(
+                f"Sintassi MAC '{settings.gaming_mac}' valida (Magic Packet generato: {len(packet)} bytes). Broadcast target: {settings.gaming_broadcast}:{settings.gaming_wol_port}"
+            )
         except ValueError as exc:
             print_error(f"Sintassi GAMING_MAC non valida: {exc}")
             all_ok = False

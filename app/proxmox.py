@@ -13,20 +13,22 @@ class ProxmoxClient:
         self.client = httpx.AsyncClient(
             timeout=settings.proxmox_timeout,
             verify=settings.proxmox_verify,
-            headers={
-                "Authorization": f"PVEAPIToken={settings.proxmox_token_id}={settings.proxmox_token_secret}"
-            },
+            headers={"Authorization": f"PVEAPIToken={settings.proxmox_token_id}={settings.proxmox_token_secret}"},
         )
 
     @property
     def status_url(self) -> str:
         s = self.settings
-        return f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/current"
+        return (
+            f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/current"
+        )
 
     @property
     def start_url(self) -> str:
         s = self.settings
-        return f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/start"
+        return (
+            f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/start"
+        )
 
     async def close(self) -> None:
         await self.client.aclose()
