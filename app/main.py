@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
 
 from .config import Settings, get_settings
 from .proxmox import ProxmoxClient, ProxmoxError
@@ -45,6 +46,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.proxmox.close()
 
     app = FastAPI(title="Ollama Proxmox Router", version="1.0.0", lifespan=lifespan)
+
+    @app.exception_handler(ClientDisconnect)
+    async def client_disconnect_handler(request: Request, exc: ClientDisconnect):
+        logger.info("Client disconnesso durante la richiesta a %s", request.url.path)
+        return JSONResponse(
+            status_code=499,
+            content={"detail": "Client disconnesso"},
+        )
 
     @app.middleware("http")
     async def authentication(request: Request, call_next):
@@ -126,6 +135,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def proxy(path: str, request: Request):
         if path.startswith("health/") or path == "gaming/start":
             raise HTTPException(status_code=404)
+        try:
+            body = await request.body()
+        except ClientDisconnect:
+            raise HTTPException(status_code=499, detail="Client disconnesso durante la lettura del body")
         await ensure_upstream_ready(request)
         client: httpx.AsyncClient = request.app.state.upstream
         target = f"{settings.upstream_base_url}/" + quote(path, safe="/@:+")
@@ -134,7 +147,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers["authorization"] = settings.upstream_authorization
         else:
             headers.pop("authorization", None)
-        body = await request.body()
         upstream_request = client.build_request(
             request.method, target, params=request.query_params, headers=headers, content=body
         )

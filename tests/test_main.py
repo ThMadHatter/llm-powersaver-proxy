@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import ClientDisconnect
 
 from app.config import Settings
 from app.main import create_app
@@ -66,3 +67,21 @@ def test_gaming_start_not_configured():
             headers={"Authorization": f"Bearer {settings.router_api_key}"},
         )
         assert res.status_code == 501
+
+
+def test_client_disconnect_handling(test_settings, monkeypatch):
+    app = create_app(test_settings)
+
+    async def mock_body(self):
+        raise ClientDisconnect()
+
+    monkeypatch.setattr("starlette.requests.Request.body", mock_body)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        res = client.post(
+            "/api/chat",
+            headers={"Authorization": f"Bearer {test_settings.router_api_key}"},
+            json={"model": "llama3"},
+        )
+        assert res.status_code == 499
+        assert res.json() == {"detail": "Client disconnesso durante la lettura del body"}
