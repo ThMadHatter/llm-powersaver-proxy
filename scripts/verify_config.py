@@ -99,9 +99,17 @@ def verify_config() -> bool:
             else:
                 print_error(f"Risposta inattesa da Proxmox API (HTTP {res.status_code}): {res.text}")
                 all_ok = False
-    except httpx.ConnectError:
+    except httpx.TimeoutException:
         print_error(
-            f"Impossibile connettersi all'host Proxmox su {settings.proxmox_base_url}. Controlla IP, porta e rete."
+            f"Timeout nella risposta da Proxmox ({settings.proxmox_base_url}). "
+            "Verifica che l'IP e la porta 8006 siano raggiungibili, che il firewall non blocchi la connessione "
+            f"e che il nome nodo '{settings.proxmox_node}' o l'URL siano corretti."
+        )
+        all_ok = False
+    except httpx.ConnectError as exc:
+        print_error(
+            f"Impossibile connettersi all'host Proxmox su {settings.proxmox_base_url}: {exc}. "
+            "Controlla IP, porta e certificato TLS (PROXMOX_VERIFY_TLS)."
         )
         all_ok = False
     except httpx.HTTPError as exc:
