@@ -1,4 +1,5 @@
 import pytest
+
 from app.wol import magic_packet
 
 

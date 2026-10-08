@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
 
 from .config import Settings, get_settings
 from .proxmox import ProxmoxClient, ProxmoxError
@@ -17,8 +18,16 @@ logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("ollama-router")
 
 HOP_BY_HOP = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailer", "transfer-encoding", "upgrade", "host", "content-length",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
 }
 
 
@@ -46,9 +55,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Ollama Proxmox Router", version="1.0.0", lifespan=lifespan)
 
+    @app.exception_handler(ClientDisconnect)
+    async def client_disconnect_handler(request: Request, exc: ClientDisconnect):
+        logger.info("Client disconnesso durante la richiesta a %s", request.url.path)
+        return JSONResponse(
+            status_code=499,
+            content={"detail": "Client disconnesso"},
+        )
+
     @app.middleware("http")
     async def authentication(request: Request, call_next):
-        verify_router_key(request, settings)
+        try:
+            verify_router_key(request, settings)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
         return await call_next(request)
 
     async def upstream_ready(client: httpx.AsyncClient) -> bool:
@@ -119,6 +143,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def proxy(path: str, request: Request):
         if path.startswith("health/") or path == "gaming/start":
             raise HTTPException(status_code=404)
+        try:
+            body = await request.body()
+        except ClientDisconnect:
+            raise HTTPException(status_code=499, detail="Client disconnesso durante la lettura del body")
         await ensure_upstream_ready(request)
         client: httpx.AsyncClient = request.app.state.upstream
         target = f"{settings.upstream_base_url}/" + quote(path, safe="/@:+")
@@ -127,7 +155,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers["authorization"] = settings.upstream_authorization
         else:
             headers.pop("authorization", None)
-        body = await request.body()
         upstream_request = client.build_request(
             request.method, target, params=request.query_params, headers=headers, content=body
         )
@@ -136,8 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=f"Connessione upstream fallita: {exc}") from exc
         response_headers = {
-            k: v for k, v in upstream.headers.items()
-            if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
+            k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
         }
         return StreamingResponse(
             upstream.aiter_raw(),

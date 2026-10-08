@@ -1,10 +1,18 @@
+import os
 from functools import lru_cache
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+env_file_path = os.getenv("ENV_FILE") or [".env", "/opt/ollama-router/.env"]
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=env_file_path,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     listen_host: str = "0.0.0.0"
     listen_port: int = 8080
