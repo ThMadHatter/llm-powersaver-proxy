@@ -12,7 +12,7 @@ Reverse proxy asincrono per Ollama/LiteLLM con streaming end-to-end, avvio autom
 4. [Configurazione del Container LXC Debian](#1-crea-il-container-lxc)
 5. [Configurazione del Token Proxmox VE](#2-crea-il-token-proxmox-con-privilegi-minimi)
 6. [Installazione e Configurazione Interattiva](#3-carica-ed-installa)
-7. [Verifica sul Campo della Configurazione (.env)](#4-verifica-della-configurazione- make-verify-config)
+7. [Verifica sul Campo della Configurazione (.env)](#4-verifica-della-configurazione-make-verify-config)
 8. [Verifica degli Endpoint ed Esempi di Uso](#5-verifica-degli-endpoint)
 9. [Configurazione Reverse Proxy (Nginx / Cloudflare)](#6-reverse-proxy)
 10. [Endpoint Gaming / Wake-on-LAN](#7-gaming--wake-on-lan)
@@ -113,7 +113,7 @@ make install
 
 Durante l'esecuzione di `make install` (o `./scripts/install.sh`), l'installer proporrà dei prompt interattivi per definire in maniera attiva:
 
-1. **Path di installazione (`APP_DIR`)**: [Default: `/opt/ollama-router`]
+1. **Path di installazione (`APP_DIR`)**: [Default: la directory corrente del repository da cui viene eseguito l'installer]
 2. **Utente di sistema (`APP_USER`)**: [Default: `ollama-router`]
 3. **Host di ascolto (`LISTEN_HOST`)**: [Default: `0.0.0.0`]
 4. **Porta di ascolto (`LISTEN_PORT`)**: [Default: `8080`]
@@ -121,7 +121,7 @@ Durante l'esecuzione di `make install` (o `./scripts/install.sh`), l'installer p
 *I campi lasciati vuoti (premendo Invio) utilizzeranno automaticamente i valori di default.*
 
 L'installer:
-- Creerà l'utente ed la directory di installazione prescelta.
+- Creerà l'utente ed la directory di installazione prescelta (se diversa dalla cartella corrente dei sorgenti).
 - Creerà l'ambiente virtuale Python `.venv` ed installerà le dipendenze.
 - Genererà il file `.env` dal modello `.env.example` se non già presente.
 - Adatterà ed installerà automaticamente il servizio systemd (`/etc/systemd/system/ollama-router.service`) sulla base dei percorsi ed utente configurati.
@@ -133,7 +133,7 @@ L'installer:
 Dopo aver compilato il file `.env` con i tuoi parametri:
 
 ```bash
-nano /opt/ollama-router/.env
+nano .env
 ```
 
 Genera una chiave API sicura per il router (se non l'hai già definita):

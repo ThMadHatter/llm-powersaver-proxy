@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Valori di default
-DEFAULT_APP_DIR="/opt/ollama-router"
+DEFAULT_APP_DIR="$SOURCE_DIR"
 DEFAULT_APP_USER="ollama-router"
 DEFAULT_LISTEN_HOST="0.0.0.0"
 DEFAULT_LISTEN_PORT="8080"
@@ -69,8 +69,10 @@ fi
 
 # Creazione directory ed installazione dei sorgenti
 install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
-echo "Copia dei file sorgente in $APP_DIR..."
-cp -a "$SOURCE_DIR/." "$APP_DIR/"
+if [ "$SOURCE_DIR" != "$APP_DIR" ]; then
+  echo "Copia dei file sorgente da $SOURCE_DIR in $APP_DIR..."
+  cp -a "$SOURCE_DIR/." "$APP_DIR/"
+fi
 
 # Configurazione virtualenv e dipendenze Python
 echo "Configurazione dell'ambiente virtuale Python in $APP_DIR/.venv..."
