@@ -96,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 started = await request.app.state.proxmox.ensure_started()
                 logger.info("VM/CT Ollama %s", "avviato" if started else "gia in esecuzione")
             except ProxmoxError as exc:
+                logger.error("Impossibile verificare/avviare la VM su Proxmox: %s", exc)
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
             loop = asyncio.get_running_loop()
             deadline = loop.time() + settings.startup_timeout
@@ -107,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return
                 await asyncio.sleep(delay)
                 delay = min(delay * 1.5, settings.startup_poll_max)
+        logger.error("Timeout (%ss) raggiunto in attesa dell'upstream Ollama", settings.startup_timeout)
         raise HTTPException(
             status_code=503,
             detail="Ollama non e diventato pronto entro il timeout",
@@ -161,6 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             upstream = await client.send(upstream_request, stream=True)
         except httpx.HTTPError as exc:
+            logger.error("Connessione upstream a %s fallita: %s", target, exc)
             raise HTTPException(status_code=502, detail=f"Connessione upstream fallita: {exc}") from exc
         response_headers = {
             k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
