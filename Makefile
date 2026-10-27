@@ -1,4 +1,4 @@
-.PHONY: help test verify-config install lint format clean
+.PHONY: help test verify-config install logs log lint format clean
 
 .DEFAULT_GOAL := help
 
@@ -17,6 +17,11 @@ verify-config: ## Verifica sul campo se i parametri in .env consentono l'esecuzi
 
 install: ## Esegue l'installer interattivo (richiede privilegi root)
 	./scripts/install.sh
+
+logs: ## Mostra i log in tempo reale del servizio systemd ollama-router
+	journalctl -u ollama-router -f -n 50
+
+log: logs ## Alias per logs
 
 lint: ## Controlla lo stile e la sintassi del codice con Ruff
 	$(PYTHON) -m ruff check app tests scripts
