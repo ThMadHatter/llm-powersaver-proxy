@@ -1,4 +1,4 @@
-.PHONY: help test verify-config install logs log lint format clean
+.PHONY: help test verify-config install update logs log lint format clean
 
 .DEFAULT_GOAL := help
 
@@ -17,6 +17,15 @@ verify-config: ## Verifica sul campo se i parametri in .env consentono l'esecuzi
 
 install: ## Esegue l'installer interattivo (richiede privilegi root)
 	./scripts/install.sh
+
+update: ## Aggiorna il codice sorgente (git pull), sincronizza le dipendenze e riavvia il servizio
+	git pull
+	$(PYTHON) -m pip install --upgrade pip wheel
+	$(PYTHON) -m pip install -r requirements.txt
+	@if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ollama-router.service; then \
+		echo "Riavvio del servizio ollama-router.service..."; \
+		systemctl restart ollama-router.service; \
+	fi
 
 logs: ## Mostra i log in tempo reale del servizio systemd ollama-router
 	journalctl -u ollama-router -f -n 50

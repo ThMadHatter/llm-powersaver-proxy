@@ -14,11 +14,12 @@ Reverse proxy asincrono per Ollama/LiteLLM con streaming end-to-end, avvio autom
 6. [Installazione e Configurazione Interattiva](#3-carica-ed-installa)
 7. [Verifica sul Campo della Configurazione (.env)](#4-verifica-della-configurazione-make-verify-config)
 8. [Verifica degli Endpoint ed Esempi di Uso](#5-verifica-degli-endpoint)
-9. [Configurazione Reverse Proxy (Nginx / Cloudflare)](#6-reverse-proxy)
-10. [Endpoint Gaming / Wake-on-LAN](#7-gaming--wake-on-lan)
-11. [Guida alle Variabili di Ambiente (.env)](#guida-alle-variabili-di-ambiente-env)
-12. [Sviluppo, Linting e Test](#sviluppo-linting-e-test)
-13. [Sicurezza](#sicurezza)
+9. [Aggiornamento di un'Installazione Esistente](#aggiornamento-di-uninstallazione-esistente)
+10. [Configurazione Reverse Proxy (Nginx / Cloudflare)](#6-reverse-proxy)
+11. [Endpoint Gaming / Wake-on-LAN](#7-gaming--wake-on-lan)
+12. [Guida alle Variabili di Ambiente (.env)](#guida-alle-variabili-di-ambiente-env)
+13. [Sviluppo, Linting e Test](#sviluppo-linting-e-test)
+14. [Sicurezza](#sicurezza)
 
 ---
 
@@ -46,7 +47,9 @@ I comandi principali disponibili tramite `make` sono:
 | Comando | Descrizione |
 | :--- | :--- |
 | `make install` | Avvia l'installer interattivo (richiede privilegi `root` o `sudo`). |
+| `make update` | Scarica gli ultimi aggiornamenti con `git pull`, aggiorna le dipendenze Python e riavvia il servizio systemd. |
 | `make verify-config` | Verifica sul campo che tutti i parametri in `.env` consentano l'esecuzione e la connessione a Proxmox VE, Upstream e WoL. |
+| `make logs` | Mostra i log in tempo reale del servizio systemd (`journalctl -u ollama-router -f`). |
 | `make test` | Esegue la suite completa di test unitari con `pytest`. |
 | `make lint` | Analizza il codice con `Ruff` per verificare lo stile e prevenire errori. |
 | `make format` | Corregge e formatta automaticamente il codice sorgente con `Ruff`. |
@@ -123,7 +126,7 @@ Durante l'esecuzione di `make install` (o `./scripts/install.sh`), l'installer p
 L'installer:
 - Creerà l'utente ed la directory di installazione prescelta (se diversa dalla cartella corrente dei sorgenti).
 - Creerà l'ambiente virtuale Python `.venv` ed installerà le dipendenze.
-- Genererà il file `.env` dal modello `.env.example` se non già presente.
+- Genererà il file `.env` dal modello `.env.example` se non già presente (il file `.env` esistente non viene mai sovrascritto).
 - Adatterà ed installerà automaticamente il servizio systemd (`/etc/systemd/system/ollama-router.service`) sulla base dei percorsi ed utente configurati.
 
 ---
@@ -159,7 +162,7 @@ Se tutti i controlli hanno esito positivo, avvia e abilita il servizio:
 ```bash
 systemctl restart ollama-router
 systemctl status ollama-router --no-pager
-journalctl -u ollama-router -f
+make logs
 ```
 
 ---
@@ -196,6 +199,27 @@ Per client compatibili con l'API OpenAI (es. Open WebUI, Jan, Continue, ecc.), i
 Base URL: http://IP_LXC:8080/v1
 API Key:  <valore di ROUTER_API_KEY>
 ```
+
+---
+
+## Aggiornamento di un'Installazione Esistente
+
+Per aggiornare una versione già installata conservando la configurazione `.env` esistente, posizionati nella cartella del repository ed esegui semplicemente:
+
+```bash
+cd /opt/ollama-proxmox-router
+make update
+```
+
+In alternativa puoi eseguire manualmente:
+
+```bash
+git pull
+./scripts/install.sh
+systemctl restart ollama-router
+```
+
+*Nota*: L'installer o il comando `make update` **non sovrascriveranno** mai il file `.env` esistente.
 
 ---
 
