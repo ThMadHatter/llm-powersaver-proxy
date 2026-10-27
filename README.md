@@ -47,6 +47,7 @@ I comandi principali disponibili tramite `make` sono:
 | Comando | Descrizione |
 | :--- | :--- |
 | `make install` | Avvia l'installer interattivo (richiede privilegi `root` o `sudo`). |
+| `make run` | Avvia o riavvia il servizio dell'applicazione `ollama-router.service`. |
 | `make update` | Scarica gli ultimi aggiornamenti con `git pull`, aggiorna le dipendenze Python e riavvia il servizio systemd. |
 | `make verify-config` | Verifica sul campo che tutti i parametri in `.env` consentano l'esecuzione e la connessione a Proxmox VE, Upstream e WoL. |
 | `make logs` | Mostra i log in tempo reale del servizio systemd (`journalctl -u ollama-router -f`). |
@@ -157,11 +158,10 @@ Lo script `scripts/verify_config.py`:
 3. Testarà la raggiungibilità dell'endpoint Upstream Ollama/LiteLLM.
 4. Verificherà la correttezza della sintassi del MAC address per il Wake-on-LAN.
 
-Se tutti i controlli hanno esito positivo, avvia e abilita il servizio:
+Se tutti i controlli hanno esito positivo, avvia ed abilita il servizio con:
 
 ```bash
-systemctl restart ollama-router
-systemctl status ollama-router --no-pager
+make run
 make logs
 ```
 
@@ -216,7 +216,7 @@ In alternativa puoi eseguire manualmente:
 ```bash
 git pull
 ./scripts/install.sh
-systemctl restart ollama-router
+make run
 ```
 
 *Nota*: L'installer o il comando `make update` **non sovrascriveranno** mai il file `.env` esistente.

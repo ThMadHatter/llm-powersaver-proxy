@@ -1,4 +1,4 @@
-.PHONY: help test verify-config install update logs log lint format clean
+.PHONY: help test verify-config install update run logs log lint format clean
 
 .DEFAULT_GOAL := help
 
@@ -25,6 +25,16 @@ update: ## Aggiorna il codice sorgente (git pull), sincronizza le dipendenze e r
 	@if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ollama-router.service; then \
 		echo "Riavvio del servizio ollama-router.service..."; \
 		systemctl restart ollama-router.service; \
+	fi
+
+run: ## Avvia o riavvia il servizio dell'applicazione
+	@if command -v systemctl >/dev/null 2>&1; then \
+		echo "Avvio/Riavvio del servizio ollama-router.service..."; \
+		systemctl restart ollama-router.service || systemctl start ollama-router.service; \
+		systemctl status ollama-router.service --no-pager; \
+	else \
+		echo "Avvio dell'applicazione tramite uvicorn..."; \
+		$(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8080; \
 	fi
 
 logs: ## Mostra i log in tempo reale del servizio systemd ollama-router
