@@ -7,6 +7,7 @@ from app.proxmox import ProxmoxClient, ProxmoxError
 @pytest.mark.asyncio
 async def test_proxmox_urls():
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_base_url="https://pve.example.com:8006",
         proxmox_node="node1",
@@ -24,6 +25,7 @@ async def test_proxmox_urls():
 @pytest.mark.asyncio
 async def test_proxmox_status_running(httpx_mock):
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_base_url="https://pve.example.com:8006",
         proxmox_node="node1",
@@ -34,7 +36,6 @@ async def test_proxmox_status_running(httpx_mock):
     )
     client = ProxmoxClient(settings)
 
-    # Mock status response twice or allow reuse
     httpx_mock.add_response(
         url=client.status_url,
         json={"data": {"status": "running"}},
@@ -55,6 +56,7 @@ async def test_proxmox_status_running(httpx_mock):
 @pytest.mark.asyncio
 async def test_proxmox_ensure_started_stopped(httpx_mock):
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_base_url="https://pve.example.com:8006",
         proxmox_node="node1",
@@ -82,6 +84,7 @@ async def test_proxmox_ensure_started_stopped(httpx_mock):
 @pytest.mark.asyncio
 async def test_proxmox_ensure_started_error(httpx_mock):
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_base_url="https://pve.example.com:8006",
         proxmox_token_id="user@pve!token",

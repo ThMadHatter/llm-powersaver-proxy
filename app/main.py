@@ -63,6 +63,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={"detail": "Client disconnesso"},
         )
 
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        if exc.status_code >= 500:
+            logger.error("Errore HTTP %s per %s: %s", exc.status_code, request.url.path, exc.detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=exc.headers,
+        )
+
     @app.middleware("http")
     async def authentication(request: Request, call_next):
         try:

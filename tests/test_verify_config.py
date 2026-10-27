@@ -13,6 +13,7 @@ def test_verify_config_success(httpx_mock, monkeypatch):
     monkeypatch.setenv("PROXMOX_VMID", "100")
     monkeypatch.setenv("UPSTREAM_BASE_URL", "http://127.0.0.1:11434")
     monkeypatch.setenv("GAMING_MAC", "AA:BB:CC:DD:EE:FF")
+    monkeypatch.setenv("ENV_FILE", "/nonexistent.env")
 
     httpx_mock.add_response(
         url="https://pve.example.com:8006/api2/json/nodes/node1/qemu/100/status/current",
@@ -34,6 +35,7 @@ def test_verify_config_proxmox_error(httpx_mock, monkeypatch):
     monkeypatch.setenv("PROXMOX_NODE", "node1")
     monkeypatch.setenv("PROXMOX_VM_TYPE", "qemu")
     monkeypatch.setenv("PROXMOX_VMID", "100")
+    monkeypatch.setenv("ENV_FILE", "/nonexistent.env")
 
     httpx_mock.add_response(
         url="https://pve.example.com:8006/api2/json/nodes/node1/qemu/100/status/current",
@@ -55,6 +57,7 @@ def test_verify_config_proxmox_timeout(httpx_mock, monkeypatch):
     monkeypatch.setenv("PROXMOX_NODE", "node1")
     monkeypatch.setenv("PROXMOX_VM_TYPE", "qemu")
     monkeypatch.setenv("PROXMOX_VMID", "100")
+    monkeypatch.setenv("ENV_FILE", "/nonexistent.env")
 
     httpx_mock.add_exception(
         httpx.ReadTimeout("The read operation timed out"),

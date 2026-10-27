@@ -13,17 +13,18 @@ class DummyRequest:
 
 def test_verify_router_key_public_path():
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
     )
     req = DummyRequest("/health/live", {})
-    # Should not raise exception
     verify_router_key(req, settings)
 
 
 def test_verify_router_key_valid():
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
@@ -34,6 +35,7 @@ def test_verify_router_key_valid():
 
 def test_verify_router_key_invalid():
     settings = Settings(
+        _env_file=None,
         router_api_key="1234567890123456",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
