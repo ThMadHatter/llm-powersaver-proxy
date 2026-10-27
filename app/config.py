@@ -4,12 +4,17 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-env_file_path = os.getenv("ENV_FILE") or [".env", "/opt/ollama-router/.env"]
+
+def get_env_files():
+    env_file = os.getenv("ENV_FILE")
+    if env_file:
+        return (env_file,)
+    return (".env", "/opt/ollama-router/.env")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=env_file_path,
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )

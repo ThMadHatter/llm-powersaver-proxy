@@ -32,16 +32,7 @@ HOP_BY_HOP = {
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    if settings is None:
-        try:
-            settings = get_settings()
-        except Exception:  # noqa: BLE001
-            settings = Settings(
-                _env_file=None,
-                router_api_key="1234567890123456",
-                proxmox_token_id="user@pve!token",
-                proxmox_token_secret="secret",
-            )
+    settings = settings or get_settings()
     logger.setLevel(settings.log_level.upper())
 
     @asynccontextmanager
