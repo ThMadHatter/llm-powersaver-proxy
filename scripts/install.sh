@@ -79,6 +79,9 @@ echo "Configurazione dell'ambiente virtuale Python in $APP_DIR/.venv..."
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/pip" install --upgrade pip wheel
 "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+if [ -f "$APP_DIR/requirements-dev.txt" ]; then
+  "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements-dev.txt"
+fi
 
 # Gestione del file .env
 if [ ! -f "$APP_DIR/.env" ]; then
