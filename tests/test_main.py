@@ -90,8 +90,7 @@ def test_client_disconnect_handling(test_settings, monkeypatch):
         assert res.json() == {"detail": "Client disconnesso durante la lettura del body"}
 
 
-def test_wol_fallback_on_proxmox_error(test_settings, httpx_mock, monkeypatch):
-    # Prima e seconda verifica upstream offline
+def test_wol_fallback_and_proxmox_boot_retry(test_settings, httpx_mock, monkeypatch):
     httpx_mock.add_response(
         url="http://127.0.0.1:11434/api/version",
         status_code=503,
@@ -100,7 +99,6 @@ def test_wol_fallback_on_proxmox_error(test_settings, httpx_mock, monkeypatch):
         url="http://127.0.0.1:11434/api/version",
         status_code=503,
     )
-    # Terza verifica upstream dopo WoL online
     httpx_mock.add_response(
         url="http://127.0.0.1:11434/api/version",
         status_code=200,
@@ -111,12 +109,17 @@ def test_wol_fallback_on_proxmox_error(test_settings, httpx_mock, monkeypatch):
     )
 
     wol_sent = []
+    proxmox_calls = 0
 
     def mock_send_wol(mac, broadcast, port):
         wol_sent.append((mac, broadcast, port))
 
     async def mock_ensure_started(self):
-        raise ProxmoxError("Connection failed")
+        nonlocal proxmox_calls
+        proxmox_calls += 1
+        if proxmox_calls == 1:
+            raise ProxmoxError("Host Proxmox offline durante il WoL")
+        return True
 
     monkeypatch.setattr("app.main.send_wol", mock_send_wol)
     monkeypatch.setattr("app.proxmox.ProxmoxClient.ensure_started", mock_ensure_started)
@@ -129,7 +132,7 @@ def test_wol_fallback_on_proxmox_error(test_settings, httpx_mock, monkeypatch):
         )
         assert res.status_code == 200
         assert len(wol_sent) == 1
-        assert wol_sent[0][0] == "AA:BB:CC:DD:EE:FF"
+        assert proxmox_calls == 2
 
 
 def test_proxmox_error_without_wol(monkeypatch):

@@ -141,6 +141,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             while loop.time() < deadline:
                 if await request.is_disconnected():
                     raise HTTPException(status_code=499, detail="Client disconnesso durante il cold start")
+
+                # Se Proxmox era offline/spento al momento del WoL, riprova l'avvio della VM/CT via API
+                if not proxmox_success:
+                    try:
+                        started = await request.app.state.proxmox.ensure_started()
+                        logger.info(
+                            "Proxmox e diventato raggiungibile: VM/CT Ollama %s via API Proxmox",
+                            "avviato" if started else "gia in esecuzione",
+                        )
+                        proxmox_success = True
+                    except ProxmoxError:
+                        pass
+
                 if await upstream_ready(client):
                     return
                 await asyncio.sleep(delay)
