@@ -1,7 +1,9 @@
 import pytest
+from starlette.requests import ClientDisconnect
 
 from app.config import Settings
 from app.main import create_app
+from app.proxmox import ProxmoxError
 
 
 @pytest.fixture
@@ -15,6 +17,7 @@ def test_settings():
         proxmox_token_secret="secret",
         gaming_mac="AA:BB:CC:DD:EE:FF",
         gaming_broadcast="127.0.0.1",
+        startup_timeout=1.0,
     )
 
 
@@ -70,8 +73,6 @@ def test_gaming_start_not_configured():
 
 
 def test_client_disconnect_handling(test_settings, monkeypatch):
-    from starlette.requests import ClientDisconnect
-
     app = create_app(test_settings)
 
     async def mock_body(self):
@@ -87,3 +88,70 @@ def test_client_disconnect_handling(test_settings, monkeypatch):
         )
         assert res.status_code == 499
         assert res.json() == {"detail": "Client disconnesso durante la lettura del body"}
+
+
+def test_wol_fallback_on_proxmox_error(test_settings, httpx_mock, monkeypatch):
+    # Prima e seconda verifica upstream offline
+    httpx_mock.add_response(
+        url="http://127.0.0.1:11434/api/version",
+        status_code=503,
+    )
+    httpx_mock.add_response(
+        url="http://127.0.0.1:11434/api/version",
+        status_code=503,
+    )
+    # Terza verifica upstream dopo WoL online
+    httpx_mock.add_response(
+        url="http://127.0.0.1:11434/api/version",
+        status_code=200,
+    )
+    httpx_mock.add_response(
+        url="http://127.0.0.1:11434/api/tags",
+        json={"models": []},
+    )
+
+    wol_sent = []
+
+    def mock_send_wol(mac, broadcast, port):
+        wol_sent.append((mac, broadcast, port))
+
+    async def mock_ensure_started(self):
+        raise ProxmoxError("Connection failed")
+
+    monkeypatch.setattr("app.main.send_wol", mock_send_wol)
+    monkeypatch.setattr("app.proxmox.ProxmoxClient.ensure_started", mock_ensure_started)
+
+    app = create_app(test_settings)
+    with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
+        res = client.get(
+            "/api/tags",
+            headers={"Authorization": f"Bearer {test_settings.router_api_key}"},
+        )
+        assert res.status_code == 200
+        assert len(wol_sent) == 1
+        assert wol_sent[0][0] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_proxmox_error_without_wol(monkeypatch):
+    settings = Settings(
+        _env_file=None,
+        router_api_key="1234567890123456",
+        proxmox_token_id="user@pve!token",
+        proxmox_token_secret="secret",
+        upstream_base_url="http://127.0.0.1:11434",
+        proxmox_base_url="https://127.0.0.1:8006",
+        gaming_mac="",
+    )
+
+    async def mock_ensure_started(self):
+        raise ProxmoxError("Connection failed")
+
+    monkeypatch.setattr("app.proxmox.ProxmoxClient.ensure_started", mock_ensure_started)
+
+    app = create_app(settings)
+    with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
+        res = client.get(
+            "/api/tags",
+            headers={"Authorization": f"Bearer {settings.router_api_key}"},
+        )
+        assert res.status_code == 502

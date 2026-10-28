@@ -102,12 +102,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with request.app.state.start_lock:
             if await upstream_ready(client):
                 return
+            proxmox_success = False
             try:
                 started = await request.app.state.proxmox.ensure_started()
-                logger.info("VM/CT Ollama %s", "avviato" if started else "gia in esecuzione")
+                logger.info("VM/CT Ollama %s via API Proxmox", "avviato" if started else "gia in esecuzione")
+                proxmox_success = True
             except ProxmoxError as exc:
-                logger.error("Impossibile verificare/avviare la VM su Proxmox: %s", exc)
-                raise HTTPException(status_code=502, detail=str(exc)) from exc
+                logger.warning("Impossibile verificare/avviare la VM via Proxmox API: %s", exc)
+
+            if not proxmox_success:
+                if settings.gaming_mac:
+                    try:
+                        logger.info(
+                            "Invio pacchetto Wake-on-LAN a MAC %s (%s:%s)",
+                            settings.gaming_mac,
+                            settings.gaming_broadcast,
+                            settings.gaming_wol_port,
+                        )
+                        await asyncio.to_thread(
+                            send_wol,
+                            settings.gaming_mac,
+                            settings.gaming_broadcast,
+                            settings.gaming_wol_port,
+                        )
+                    except (ValueError, OSError) as wol_exc:
+                        logger.error("Invio pacchetto WoL fallito: %s", wol_exc)
+                        raise HTTPException(
+                            status_code=502, detail=f"Errore Proxmox ed errore WoL: {wol_exc}"
+                        ) from wol_exc
+                else:
+                    raise HTTPException(
+                        status_code=502, detail="Errore API Proxmox e nessun GAMING_MAC configurato per WoL"
+                    )
+
             loop = asyncio.get_running_loop()
             deadline = loop.time() + settings.startup_timeout
             delay = settings.startup_poll_initial
