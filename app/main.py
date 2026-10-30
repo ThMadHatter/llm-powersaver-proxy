@@ -218,8 +218,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response_headers = {
             k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
         }
+
+        async def stream_body():
+            try:
+                async for chunk in upstream.aiter_raw():
+                    yield chunk
+            except httpx.HTTPError as exc:
+                logger.warning("Errore durante lo streaming dall'upstream (%s): %s", target, exc)
+            except (ClientDisconnect, asyncio.CancelledError):
+                logger.info("Client disconnesso durante lo streaming per %s", target)
+
         return StreamingResponse(
-            upstream.aiter_raw(),
+            stream_body(),
             status_code=upstream.status_code,
             headers=response_headers,
             background=BackgroundTask(upstream.aclose),

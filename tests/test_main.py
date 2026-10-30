@@ -158,3 +158,41 @@ def test_proxmox_error_without_wol(monkeypatch):
             headers={"Authorization": f"Bearer {settings.router_api_key}"},
         )
         assert res.status_code == 502
+
+
+def test_streaming_remote_protocol_error(test_settings, httpx_mock):
+    import httpx
+
+    httpx_mock.add_response(
+        url="http://127.0.0.1:11434/api/version",
+        status_code=200,
+    )
+
+    def custom_stream_callback(request):
+        class FaultyStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b"data: chunk1\n\n"
+                raise httpx.RemoteProtocolError("peer closed connection without sending complete message body")
+
+        return httpx.Response(
+            200,
+            stream=FaultyStream(),
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    httpx_mock.add_callback(
+        custom_stream_callback,
+        url="http://127.0.0.1:11434/v1/chat/completions",
+        method="POST",
+    )
+
+    app = create_app(test_settings)
+    with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
+        res = client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {test_settings.router_api_key}"},
+            json={"model": "llama3", "messages": [{"role": "user", "content": "hi"}]},
+        )
+        assert res.status_code == 200
+        # The first chunk should be received before stream drops without crashing the server
+        assert b"data: chunk1" in res.content
