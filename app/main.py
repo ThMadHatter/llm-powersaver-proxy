@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
 
 from .config import Settings, get_settings
 from .proxmox import ProxmoxClient, ProxmoxError
@@ -17,8 +18,16 @@ logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("ollama-router")
 
 HOP_BY_HOP = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailer", "transfer-encoding", "upgrade", "host", "content-length",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
 }
 
 
@@ -46,9 +55,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Ollama Proxmox Router", version="1.0.0", lifespan=lifespan)
 
+    @app.exception_handler(ClientDisconnect)
+    async def client_disconnect_handler(request: Request, exc: ClientDisconnect):
+        logger.info("Client disconnesso durante la richiesta a %s", request.url.path)
+        return JSONResponse(
+            status_code=499,
+            content={"detail": "Client disconnesso"},
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        if exc.status_code >= 500:
+            logger.error("Errore HTTP %s per %s: %s", exc.status_code, request.url.path, exc.detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=exc.headers,
+        )
+
     @app.middleware("http")
     async def authentication(request: Request, call_next):
-        verify_router_key(request, settings)
+        try:
+            verify_router_key(request, settings)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers,
+            )
         return await call_next(request)
 
     async def upstream_ready(client: httpx.AsyncClient) -> bool:
@@ -68,21 +102,63 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with request.app.state.start_lock:
             if await upstream_ready(client):
                 return
+            proxmox_success = False
             try:
                 started = await request.app.state.proxmox.ensure_started()
-                logger.info("VM/CT Ollama %s", "avviato" if started else "gia in esecuzione")
+                logger.info("VM/CT Ollama %s via API Proxmox", "avviato" if started else "gia in esecuzione")
+                proxmox_success = True
             except ProxmoxError as exc:
-                raise HTTPException(status_code=502, detail=str(exc)) from exc
+                logger.warning("Impossibile verificare/avviare la VM via Proxmox API: %s", exc)
+
+            if not proxmox_success:
+                if settings.gaming_mac:
+                    try:
+                        logger.info(
+                            "Invio pacchetto Wake-on-LAN a MAC %s (%s:%s)",
+                            settings.gaming_mac,
+                            settings.gaming_broadcast,
+                            settings.gaming_wol_port,
+                        )
+                        await asyncio.to_thread(
+                            send_wol,
+                            settings.gaming_mac,
+                            settings.gaming_broadcast,
+                            settings.gaming_wol_port,
+                        )
+                    except (ValueError, OSError) as wol_exc:
+                        logger.error("Invio pacchetto WoL fallito: %s", wol_exc)
+                        raise HTTPException(
+                            status_code=502, detail=f"Errore Proxmox ed errore WoL: {wol_exc}"
+                        ) from wol_exc
+                else:
+                    raise HTTPException(
+                        status_code=502, detail="Errore API Proxmox e nessun GAMING_MAC configurato per WoL"
+                    )
+
             loop = asyncio.get_running_loop()
             deadline = loop.time() + settings.startup_timeout
             delay = settings.startup_poll_initial
             while loop.time() < deadline:
                 if await request.is_disconnected():
                     raise HTTPException(status_code=499, detail="Client disconnesso durante il cold start")
+
+                # Se Proxmox era offline/spento al momento del WoL, riprova l'avvio della VM/CT via API
+                if not proxmox_success:
+                    try:
+                        started = await request.app.state.proxmox.ensure_started()
+                        logger.info(
+                            "Proxmox e diventato raggiungibile: VM/CT Ollama %s via API Proxmox",
+                            "avviato" if started else "gia in esecuzione",
+                        )
+                        proxmox_success = True
+                    except ProxmoxError:
+                        pass
+
                 if await upstream_ready(client):
                     return
                 await asyncio.sleep(delay)
                 delay = min(delay * 1.5, settings.startup_poll_max)
+        logger.error("Timeout (%ss) raggiunto in attesa dell'upstream Ollama", settings.startup_timeout)
         raise HTTPException(
             status_code=503,
             detail="Ollama non e diventato pronto entro il timeout",
@@ -119,6 +195,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def proxy(path: str, request: Request):
         if path.startswith("health/") or path == "gaming/start":
             raise HTTPException(status_code=404)
+        try:
+            body = await request.body()
+        except ClientDisconnect:
+            raise HTTPException(status_code=499, detail="Client disconnesso durante la lettura del body")
         await ensure_upstream_ready(request)
         client: httpx.AsyncClient = request.app.state.upstream
         target = f"{settings.upstream_base_url}/" + quote(path, safe="/@:+")
@@ -127,17 +207,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers["authorization"] = settings.upstream_authorization
         else:
             headers.pop("authorization", None)
-        body = await request.body()
         upstream_request = client.build_request(
             request.method, target, params=request.query_params, headers=headers, content=body
         )
         try:
             upstream = await client.send(upstream_request, stream=True)
         except httpx.HTTPError as exc:
+            logger.error("Connessione upstream a %s fallita: %s", target, exc)
             raise HTTPException(status_code=502, detail=f"Connessione upstream fallita: {exc}") from exc
         response_headers = {
-            k: v for k, v in upstream.headers.items()
-            if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
+            k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() != "content-encoding"
         }
         return StreamingResponse(
             upstream.aiter_raw(),
