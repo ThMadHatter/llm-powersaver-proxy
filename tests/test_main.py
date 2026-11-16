@@ -11,7 +11,7 @@ def test_settings():
     return Settings(
         _env_file=None,
         router_api_key="1234567890123456",
-        upstream_base_url="http://127.0.0.1:11434",
+        upstream_base_url="http://127.0.0.1:4000",
         proxmox_base_url="https://127.0.0.1:8006",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
@@ -26,7 +26,7 @@ def test_root_endpoint(test_settings):
     with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
         res = client.get("/")
         assert res.status_code == 200
-        assert res.json() == {"service": "ollama-proxmox-router", "docs": "/docs"}
+        assert res.json() == {"service": "litellm-proxmox-router", "docs": "/docs"}
 
 
 def test_live_health_endpoint(test_settings):
@@ -40,7 +40,7 @@ def test_live_health_endpoint(test_settings):
 def test_unauthorized_proxy(test_settings):
     app = create_app(test_settings)
     with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
-        res = client.get("/api/tags")
+        res = client.get("/v1/models")
         assert res.status_code == 401
 
 
@@ -82,7 +82,7 @@ def test_client_disconnect_handling(test_settings, monkeypatch):
 
     with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
         res = client.post(
-            "/api/chat",
+            "/v1/chat/completions",
             headers={"Authorization": f"Bearer {test_settings.router_api_key}"},
             json={"model": "llama3"},
         )
@@ -92,19 +92,19 @@ def test_client_disconnect_handling(test_settings, monkeypatch):
 
 def test_wol_fallback_and_proxmox_boot_retry(test_settings, httpx_mock, monkeypatch):
     httpx_mock.add_response(
-        url="http://127.0.0.1:11434/api/version",
+        url="http://127.0.0.1:4000/health/liveliness",
         status_code=503,
     )
     httpx_mock.add_response(
-        url="http://127.0.0.1:11434/api/version",
+        url="http://127.0.0.1:4000/health/liveliness",
         status_code=503,
     )
     httpx_mock.add_response(
-        url="http://127.0.0.1:11434/api/version",
+        url="http://127.0.0.1:4000/health/liveliness",
         status_code=200,
     )
     httpx_mock.add_response(
-        url="http://127.0.0.1:11434/api/tags",
+        url="http://127.0.0.1:4000/v1/models",
         json={"models": []},
     )
 
@@ -127,7 +127,7 @@ def test_wol_fallback_and_proxmox_boot_retry(test_settings, httpx_mock, monkeypa
     app = create_app(test_settings)
     with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
         res = client.get(
-            "/api/tags",
+            "/v1/models",
             headers={"Authorization": f"Bearer {test_settings.router_api_key}"},
         )
         assert res.status_code == 200
@@ -141,7 +141,7 @@ def test_proxmox_error_without_wol(monkeypatch):
         router_api_key="1234567890123456",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
-        upstream_base_url="http://127.0.0.1:11434",
+        upstream_base_url="http://127.0.0.1:4000",
         proxmox_base_url="https://127.0.0.1:8006",
         gaming_mac="",
     )
@@ -154,7 +154,7 @@ def test_proxmox_error_without_wol(monkeypatch):
     app = create_app(settings)
     with pytest.importorskip("fastapi.testclient").TestClient(app, raise_server_exceptions=False) as client:
         res = client.get(
-            "/api/tags",
+            "/v1/models",
             headers={"Authorization": f"Bearer {settings.router_api_key}"},
         )
         assert res.status_code == 502
@@ -164,7 +164,7 @@ def test_streaming_remote_protocol_error(test_settings, httpx_mock):
     import httpx
 
     httpx_mock.add_response(
-        url="http://127.0.0.1:11434/api/version",
+        url="http://127.0.0.1:4000/health/liveliness",
         status_code=200,
     )
 
@@ -182,7 +182,7 @@ def test_streaming_remote_protocol_error(test_settings, httpx_mock):
 
     httpx_mock.add_callback(
         custom_stream_callback,
-        url="http://127.0.0.1:11434/v1/chat/completions",
+        url="http://127.0.0.1:4000/v1/chat/completions",
         method="POST",
     )
 
@@ -196,3 +196,27 @@ def test_streaming_remote_protocol_error(test_settings, httpx_mock):
         assert res.status_code == 200
         # The first chunk should be received before stream drops without crashing the server
         assert b"data: chunk1" in res.content
+
+
+def test_upstream_health_uses_litellm_authorization(httpx_mock):
+    settings = Settings(
+        _env_file=None,
+        router_api_key="1234567890123456",
+        upstream_base_url="http://127.0.0.1:4000",
+        upstream_health_path="/health/liveliness",
+        upstream_authorization="Bearer sk-litellm-test",
+        proxmox_base_url="https://127.0.0.1:8006",
+        proxmox_token_id="user@pve!token",
+        proxmox_token_secret="secret",
+    )
+    httpx_mock.add_response(
+        url="http://127.0.0.1:4000/health/liveliness",
+        status_code=200,
+    )
+    app = create_app(settings)
+    with pytest.importorskip("fastapi.testclient").TestClient(app) as client:
+        response = client.get("/health/ready")
+        assert response.status_code == 200
+        assert response.json()["upstream"] == "ready"
+    upstream_request = httpx_mock.get_requests()[0]
+    assert upstream_request.headers["authorization"] == "Bearer sk-litellm-test"

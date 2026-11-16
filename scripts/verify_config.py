@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script di verifica della configurazione .env per Ollama Proxmox Router.
+Script di verifica della configurazione .env per LiteLLM Proxmox Router.
 Controlla sul campo la validità dei parametri e la connettività verso i servizi.
 """
 
@@ -16,7 +16,7 @@ except ImportError:
     repo_root = os.path.abspath(os.path.join(script_dir, ".."))
     venv_candidates = [
         os.path.join(repo_root, ".venv", "bin", "python"),
-        os.path.join("/opt/ollama-router", ".venv", "bin", "python"),
+        os.path.join("/opt/litellm-router", ".venv", "bin", "python"),
     ]
     for venv_python in venv_candidates:
         if os.path.exists(venv_python) and os.access(venv_python, os.X_OK):
@@ -119,8 +119,8 @@ def verify_config() -> bool:
         print_error(f"Errore imprevisto Proxmox: {exc}")
         all_ok = False
 
-    # 3. Controllo Upstream Ollama / LiteLLM
-    print_step("Verifica endpoint Upstream Ollama / LiteLLM")
+    # 3. Controllo Upstream LiteLLM
+    print_step("Verifica endpoint Upstream LiteLLM")
     health_url = f"{settings.upstream_base_url}{settings.upstream_health_path}"
     print(f"  Target: {health_url}")
 

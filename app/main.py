@@ -15,7 +15,7 @@ from .security import verify_router_key
 from .wol import send_wol
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("ollama-router")
+logger = logging.getLogger("litellm-router")
 
 HOP_BY_HOP = {
     "connection",
@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.upstream.aclose()
         await app.state.proxmox.close()
 
-    app = FastAPI(title="Ollama Proxmox Router", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="LiteLLM Proxmox Router", version="1.0.0", lifespan=lifespan)
 
     @app.exception_handler(ClientDisconnect)
     async def client_disconnect_handler(request: Request, exc: ClientDisconnect):
@@ -87,8 +87,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     async def upstream_ready(client: httpx.AsyncClient) -> bool:
         try:
+            headers = {}
+            if settings.upstream_authorization:
+                headers["authorization"] = settings.upstream_authorization
             response = await client.get(
                 f"{settings.upstream_base_url}{settings.upstream_health_path}",
+                headers=headers,
                 timeout=settings.upstream_connect_timeout,
             )
             return 200 <= response.status_code < 300
@@ -105,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             proxmox_success = False
             try:
                 started = await request.app.state.proxmox.ensure_started()
-                logger.info("VM/CT Ollama %s via API Proxmox", "avviato" if started else "gia in esecuzione")
+                logger.info("VM/CT LiteLLM %s via API Proxmox", "avviato" if started else "gia in esecuzione")
                 proxmox_success = True
             except ProxmoxError as exc:
                 logger.warning("Impossibile verificare/avviare la VM via Proxmox API: %s", exc)
@@ -147,7 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     try:
                         started = await request.app.state.proxmox.ensure_started()
                         logger.info(
-                            "Proxmox e diventato raggiungibile: VM/CT Ollama %s via API Proxmox",
+                            "Proxmox e diventato raggiungibile: VM/CT LiteLLM %s via API Proxmox",
                             "avviato" if started else "gia in esecuzione",
                         )
                         proxmox_success = True
@@ -158,16 +162,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return
                 await asyncio.sleep(delay)
                 delay = min(delay * 1.5, settings.startup_poll_max)
-        logger.error("Timeout (%ss) raggiunto in attesa dell'upstream Ollama", settings.startup_timeout)
+        logger.error("Timeout (%ss) raggiunto in attesa dell'upstream LiteLLM", settings.startup_timeout)
         raise HTTPException(
             status_code=503,
-            detail="Ollama non e diventato pronto entro il timeout",
+            detail="LiteLLM non e diventato pronto entro il timeout",
             headers={"Retry-After": "10"},
         )
 
     @app.get("/")
     async def root():
-        return {"service": "ollama-proxmox-router", "docs": "/docs"}
+        return {"service": "litellm-proxmox-router", "docs": "/docs"}
 
     @app.get("/health/live")
     async def live():

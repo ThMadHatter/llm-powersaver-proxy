@@ -29,7 +29,7 @@ def test_verify_router_key_valid():
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
     )
-    req = DummyRequest("/api/chat", {"authorization": "Bearer 1234567890123456"})
+    req = DummyRequest("/v1/chat/completions", {"authorization": "Bearer 1234567890123456"})
     verify_router_key(req, settings)
 
 
@@ -40,7 +40,7 @@ def test_verify_router_key_invalid():
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
     )
-    req = DummyRequest("/api/chat", {"authorization": "Bearer wrong_key_0000000"})
+    req = DummyRequest("/v1/chat/completions", {"authorization": "Bearer wrong_key_0000000"})
     with pytest.raises(HTTPException) as exc_info:
         verify_router_key(req, settings)
     assert exc_info.value.status_code == 401

@@ -1,6 +1,6 @@
-# Ollama Proxmox Router
+# LiteLLM Proxmox Router
 
-Reverse proxy asincrono per Ollama/LiteLLM con streaming end-to-end, avvio automatico di una VM/CT su Proxmox VE al momento del bisogno (cold start on-demand) e Wake-on-LAN facoltativo.
+Reverse proxy asincrono per LiteLLM con streaming end-to-end, avvio automatico di una VM/CT su Proxmox VE al momento del bisogno (cold start on-demand) e Wake-on-LAN facoltativo.
 
 ---
 
@@ -26,11 +26,11 @@ Reverse proxy asincrono per Ollama/LiteLLM con streaming end-to-end, avvio autom
 ## Architettura e Funzionamento
 
 - **Reverse Proxy Asincrono**: Costruito su FastAPI, Starlette ed `httpx` per garantire alte prestazioni e basso consumo di memoria.
-- **Ispezione HTTP On-Demand**: Il router verifica direttamente lo stato HTTP di Ollama/LiteLLM anziché basarsi su ping ICMP.
-- **Cold Start Automatico Proxmox**: Se l'upstream Ollama risulta offline, il router invia la richiesta di avvio della VM/CT tramite API Proxmox VE e attende il completamento dell'avvio prima di inoltrare la richiesta del client.
+- **Ispezione HTTP On-Demand**: Il router verifica direttamente lo stato HTTP di LiteLLM anziché basarsi su ping ICMP.
+- **Cold Start Automatico Proxmox**: Se l'upstream LiteLLM risulta offline, il router invia la richiesta di avvio della VM/CT tramite API Proxmox VE e attende il completamento dell'avvio prima di inoltrare la richiesta del client.
 - **Lock Concorrente**: Un sistema di lock in memoria impedisce avvii multipli o concorrenti della stessa VM/CT.
 - **Streaming End-to-End**: Inoltra la risposta chunk-by-chunk (incluso `text/event-stream` per Server-Sent Events / SSE) senza bufferizzare la risposta.
-- **Trasparenza Endpoint**: Un'unica route catch-all inoltra senza alterazioni endpoint standard quali `/api/chat`, `/api/generate`, `/v1/chat/completions` e `/v1/models`.
+- **Trasparenza Endpoint**: Un'unica route catch-all inoltra senza alterazioni endpoint standard quali `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings` e `/v1/models`.
 
 ---
 
@@ -47,10 +47,10 @@ I comandi principali disponibili tramite `make` sono:
 | Comando | Descrizione |
 | :--- | :--- |
 | `make install` | Avvia l'installer interattivo (richiede privilegi `root` o `sudo`). |
-| `make run` | Avvia o riavvia il servizio dell'applicazione `ollama-router.service`. |
+| `make run` | Avvia o riavvia il servizio dell'applicazione `litellm-router.service`. |
 | `make update` | Scarica gli ultimi aggiornamenti con `git pull`, aggiorna le dipendenze Python e riavvia il servizio systemd. |
 | `make verify-config` | Verifica sul campo che tutti i parametri in `.env` consentano l'esecuzione e la connessione a Proxmox VE, Upstream e WoL. |
-| `make logs` | Mostra i log in tempo reale del servizio systemd (`journalctl -u ollama-router -f`). |
+| `make logs` | Mostra i log in tempo reale del servizio systemd (`journalctl -u litellm-router -f`). |
 | `make test` | Esegue la suite completa di test unitari con `pytest`. |
 | `make lint` | Analizza il codice con `Ruff` per verificare lo stile e prevenire errori. |
 | `make format` | Corregge e formatta automaticamente il codice sorgente con `Ruff`. |
@@ -64,7 +64,7 @@ I comandi principali disponibili tramite `make` sono:
 - Python 3.10 o superiore.
 - Accesso di rete verso:
   - Proxmox VE API (di norma porta TCP `:8006`).
-  - Upstream Ollama / LiteLLM (di norma porta TCP `:11434`).
+  - Upstream LiteLLM (di norma porta TCP `:4000`).
   - Indirizzo di Broadcast LAN per l'invio dei pacchetti WoL (di norma porta UDP `:9`).
 
 ---
@@ -78,7 +78,7 @@ Dal sito Community Scripts (o tramite GUI Proxmox VE) crea un **Debian LXC**. Im
 - **512 MB** o **1 GB RAM**
 - **4-8 GB disco**
 - **IP statico** o prenotazione DHCP
-- Accesso di rete verso Proxmox `:8006`, Ollama `:11434` e il broadcast LAN per WoL.
+- Accesso di rete verso Proxmox `:8006`, LiteLLM `:4000` e il broadcast LAN per WoL.
 - Nesting non necessario.
 
 *Nota*: Non installare il servizio direttamente sull'host Proxmox VE principale, ma sempre all'interno di un LXC/VM dedicato.
@@ -90,13 +90,13 @@ Dal sito Community Scripts (o tramite GUI Proxmox VE) crea un **Debian LXC**. Im
 Nella GUI di Proxmox VE:
 
 1. Vai su `Datacenter > Permissions > Users`: crea un utente dedicato, ad esempio `router@pve`.
-2. Vai su `Datacenter > Permissions > API Tokens`: crea il token `ollama-router` per l'utente appena creato. Copia e salva subito il valore `Secret`.
+2. Vai su `Datacenter > Permissions > API Tokens`: crea il token `litellm-router` per l'utente appena creato. Copia e salva subito il valore `Secret`.
 3. Assegna all'utente/token un ruolo con privilegi minimi limitatamente alla sola VM/CT interessata:
    - `VM.Audit` (per leggere lo stato corrente della VM/CT)
    - `VM.PowerMgmt` (per inviare il comando di avvio alla VM/CT)
-4. Se è abilitata la **Privilege Separation**, assegna l'ACL direttamente al token (es. `router@pve!ollama-router`).
+4. Se è abilitata la **Privilege Separation**, assegna l'ACL direttamente al token (es. `router@pve!litellm-router`).
 
-Il Token ID completo ha forma: `router@pve!ollama-router`.
+Il Token ID completo ha forma: `router@pve!litellm-router`.
 
 ---
 
@@ -107,8 +107,8 @@ Nel container LXC clona il repository ed esegui l'installer:
 ```bash
 apt-get update && apt-get install -y git make
 cd /opt
-git clone https://github.com/ThMadHatter/llm-powersaver-proxy.git
-cd ollama-proxmox-router
+git clone https://github.com/ThMadHatter/llm-powersaver-proxy.git litellm-proxmox-router
+cd litellm-proxmox-router
 chmod +x scripts/*.sh
 make install
 ```
@@ -118,7 +118,7 @@ make install
 Durante l'esecuzione di `make install` (o `./scripts/install.sh`), l'installer proporrà dei prompt interattivi per definire in maniera attiva:
 
 1. **Path di installazione (`APP_DIR`)**: [Default: la directory corrente del repository da cui viene eseguito l'installer]
-2. **Utente di sistema (`APP_USER`)**: [Default: `ollama-router`]
+2. **Utente di sistema (`APP_USER`)**: [Default: `litellm-router`]
 3. **Host di ascolto (`LISTEN_HOST`)**: [Default: `0.0.0.0`]
 4. **Porta di ascolto (`LISTEN_PORT`)**: [Default: `8080`]
 
@@ -128,7 +128,7 @@ L'installer:
 - Creerà l'utente ed la directory di installazione prescelta (se diversa dalla cartella corrente dei sorgenti).
 - Creerà l'ambiente virtuale Python `.venv` ed installerà le dipendenze.
 - Genererà il file `.env` dal modello `.env.example` se non già presente (il file `.env` esistente non viene mai sovrascritto).
-- Adatterà ed installerà automaticamente il servizio systemd (`/etc/systemd/system/ollama-router.service`) sulla base dei percorsi ed utente configurati.
+- Adatterà ed installerà automaticamente il servizio systemd (`/etc/systemd/system/litellm-router.service`) sulla base dei percorsi ed utente configurati.
 
 ---
 
@@ -155,7 +155,7 @@ make verify-config
 Lo script `scripts/verify_config.py`:
 1. Validarà la struttura del file `.env` (controllo di tipo e presenza campi obbligatori).
 2. Effettuerà una chiamata reale verso le API di Proxmox VE verificando l'autenticazione Token e lo stato attuale della VM/CT.
-3. Testarà la raggiungibilità dell'endpoint Upstream Ollama/LiteLLM.
+3. Testarà la raggiungibilità dell'endpoint upstream LiteLLM.
 4. Verificherà la correttezza della sintassi del MAC address per il Wake-on-LAN.
 
 Se tutti i controlli hanno esito positivo, avvia ed abilita il servizio con:
@@ -176,10 +176,10 @@ curl http://IP_LXC:8080/health/live
 curl -i http://IP_LXC:8080/health/ready
 ```
 
-### Test Ollama Non-Streaming
+### Test LiteLLM Non-Streaming
 
 ```bash
-curl -sS http://IP_LXC:8080/api/tags \
+curl -sS http://IP_LXC:8080/v1/models \
   -H 'Authorization: Bearer LA_TUA_ROUTER_API_KEY'
 ```
 
@@ -188,6 +188,7 @@ curl -sS http://IP_LXC:8080/api/tags \
 ```bash
 export ROUTER_URL=http://IP_LXC:8080
 export ROUTER_API_KEY=LA_TUA_ROUTER_API_KEY
+export MODEL_NAME=ALIAS_MODELLO_ESPOSTO_DA_LITELLM
 ./scripts/test_stream.sh
 ```
 
@@ -207,7 +208,7 @@ API Key:  <valore di ROUTER_API_KEY>
 Per aggiornare una versione già installata conservando la configurazione `.env` esistente, posizionati nella cartella del repository ed esegui semplicemente:
 
 ```bash
-cd /opt/ollama-proxmox-router
+cd /opt/litellm-proxmox-router
 make update
 ```
 
@@ -271,14 +272,14 @@ L'endpoint risponde immediatamente con HTTP `202 Accepted`.
 | `LISTEN_PORT` | `8080` | Porta TCP di ascolto del proxy router. |
 | `LOG_LEVEL` | `INFO` | Livello di log (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `ROUTER_API_KEY` | *(Obbligatorio)* | Chiave segreta richiesta nell'header `Authorization: Bearer <KEY>` (minimo 16 caratteri). |
-| `UPSTREAM_BASE_URL` | `http://192.168.1.50:11434` | URL base dell'istanza Ollama o LiteLLM. |
-| `UPSTREAM_HEALTH_PATH` | `/api/version` | Path HTTP per verificare lo stato di salute dell'upstream. |
+| `UPSTREAM_BASE_URL` | `http://192.168.1.50:4000` | URL base dell'istanza LiteLLM. |
+| `UPSTREAM_HEALTH_PATH` | `/health/liveliness` | Path HTTP per verificare lo stato di salute dell'upstream. |
 | `UPSTREAM_AUTHORIZATION` | *(Vuoto)* | Header `Authorization` opzionale da inoltrare all'upstream. |
 | `PROXMOX_BASE_URL` | `https://192.168.1.10:8006` | URL API dell'host Proxmox VE. |
 | `PROXMOX_NODE` | `pve` | Nome del nodo Proxmox su cui risiede la VM/CT. |
 | `PROXMOX_VM_TYPE` | `qemu` | Tipo di risorsa su Proxmox: `qemu` (VM) oppure `lxc` (CT). |
 | `PROXMOX_VMID` | `101` | VMID numerico della VM o Container. |
-| `PROXMOX_TOKEN_ID` | *(Obbligatorio)* | Token ID API Proxmox (es. `user@pve!ollama-router`). |
+| `PROXMOX_TOKEN_ID` | *(Obbligatorio)* | Token ID API Proxmox (es. `user@pve!litellm-router`). |
 | `PROXMOX_TOKEN_SECRET` | *(Obbligatorio)* | Secret UUID associato al token Proxmox. |
 | `PROXMOX_VERIFY_TLS` | `false` | Se `true`, verifica il certificato SSL/TLS di Proxmox VE. |
 | `PROXMOX_CA_FILE` | *(Vuoto)* | Percorso facoltativo al file CA `.pem` per certificati custom. |

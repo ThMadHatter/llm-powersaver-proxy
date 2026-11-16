@@ -12,7 +12,7 @@ def test_settings_default_and_validation():
     )
     assert settings.listen_host == "0.0.0.0"
     assert settings.listen_port == 8080
-    assert settings.upstream_base_url == "http://192.168.1.50:11434"
+    assert settings.upstream_base_url == "http://192.168.1.50:4000"
     assert settings.proxmox_verify is False
 
 
@@ -20,12 +20,12 @@ def test_settings_strip_slash():
     settings = Settings(
         _env_file=None,
         router_api_key="1234567890123456",
-        upstream_base_url="http://192.168.1.50:11434/",
+        upstream_base_url="http://192.168.1.50:4000/",
         proxmox_base_url="https://192.168.1.10:8006/",
         proxmox_token_id="user@pve!token",
         proxmox_token_secret="secret",
     )
-    assert settings.upstream_base_url == "http://192.168.1.50:11434"
+    assert settings.upstream_base_url == "http://192.168.1.50:4000"
     assert settings.proxmox_base_url == "https://192.168.1.10:8006"
 
 

@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 
 # Individua l'interprete Python nell'ambiente virtuale se presente
-PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; elif [ -f /opt/ollama-router/.venv/bin/python ]; then echo /opt/ollama-router/.venv/bin/python; else echo python3; fi)
+PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; elif [ -f /opt/litellm-router/.venv/bin/python ]; then echo /opt/litellm-router/.venv/bin/python; else echo python3; fi)
 
 help: ## Mostra questa guida di aiuto
 	@echo "Comandi disponibili:"
@@ -22,23 +22,23 @@ update: ## Aggiorna il codice sorgente (git pull), sincronizza le dipendenze e r
 	git pull
 	$(PYTHON) -m pip install --upgrade pip wheel
 	$(PYTHON) -m pip install -r requirements.txt
-	@if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ollama-router.service; then \
-		echo "Riavvio del servizio ollama-router.service..."; \
-		systemctl restart ollama-router.service; \
+	@if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet litellm-router.service; then \
+		echo "Riavvio del servizio litellm-router.service..."; \
+		systemctl restart litellm-router.service; \
 	fi
 
 run: ## Avvia o riavvia il servizio dell'applicazione
 	@if command -v systemctl >/dev/null 2>&1; then \
-		echo "Avvio/Riavvio del servizio ollama-router.service..."; \
-		systemctl restart ollama-router.service || systemctl start ollama-router.service; \
-		systemctl status ollama-router.service --no-pager; \
+		echo "Avvio/Riavvio del servizio litellm-router.service..."; \
+		systemctl restart litellm-router.service || systemctl start litellm-router.service; \
+		systemctl status litellm-router.service --no-pager; \
 	else \
 		echo "Avvio dell'applicazione tramite uvicorn..."; \
 		$(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8080; \
 	fi
 
-logs: ## Mostra i log in tempo reale del servizio systemd ollama-router
-	journalctl -u ollama-router -f -n 50
+logs: ## Mostra i log in tempo reale del servizio systemd litellm-router
+	journalctl -u litellm-router -f -n 50
 
 log: logs ## Alias per logs
 

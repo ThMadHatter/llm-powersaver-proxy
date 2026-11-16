@@ -11,7 +11,7 @@ SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Valori di default
 DEFAULT_APP_DIR="$SOURCE_DIR"
-DEFAULT_APP_USER="ollama-router"
+DEFAULT_APP_USER="litellm-router"
 DEFAULT_LISTEN_HOST="0.0.0.0"
 DEFAULT_LISTEN_PORT="8080"
 
@@ -41,7 +41,7 @@ prompt_input() {
 }
 
 echo "=================================================="
-echo " Configurazione Installazione Ollama Proxmox Router "
+echo " Configurazione Installazione LiteLLM Proxmox Router "
 echo "=================================================="
 
 APP_DIR=$(prompt_input "Percorso di installazione (APP_DIR)" "$DEFAULT_APP_DIR" "${APP_DIR:-}")
@@ -97,12 +97,12 @@ fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 # Creazione personalizzata del file di servizio systemd
-SERVICE_FILE="/etc/systemd/system/ollama-router.service"
+SERVICE_FILE="/etc/systemd/system/litellm-router.service"
 echo "Generazione file di servizio systemd ($SERVICE_FILE)..."
 
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
-Description=Ollama Proxmox Router
+Description=LiteLLM Proxmox Router
 After=network-online.target
 Wants=network-online.target
 
@@ -126,10 +126,10 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable ollama-router.service
+systemctl enable litellm-router.service
 
 echo "=================================================="
 echo " Installazione completata con successo!           "
 echo " Modifica il file $APP_DIR/.env, poi avvia:       "
-echo "   systemctl restart ollama-router                "
+echo "   systemctl restart litellm-router                "
 echo "=================================================="

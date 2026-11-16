@@ -9,7 +9,7 @@ def get_env_files():
     env_file = os.getenv("ENV_FILE")
     if env_file:
         return (env_file,)
-    return (".env", "/opt/ollama-router/.env")
+    return (".env", "/opt/litellm-router/.env")
 
 
 class Settings(BaseSettings):
@@ -24,9 +24,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     router_api_key: str = Field(min_length=16)
-    upstream_base_url: str = "http://192.168.1.50:11434"
+    upstream_base_url: str = "http://192.168.1.50:4000"
     upstream_authorization: str = ""
-    upstream_health_path: str = "/api/version"
+    upstream_health_path: str = "/health/liveliness"
     upstream_connect_timeout: float = 3.0
     upstream_write_timeout: float = 60.0
     upstream_pool_timeout: float = 5.0
