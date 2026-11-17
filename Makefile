@@ -3,7 +3,7 @@
 
 ENV_FILE ?= router/.env
 
-.PHONY: help up down install-router setup setup-poweroff doctor doctor-quick test test-router test-doctor clean
+.PHONY: help up down lock unlock lock-status install-router setup setup-poweroff doctor doctor-quick test test-router test-doctor clean
 
 help: ## Mostra questo elenco di comandi
 >@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -13,6 +13,15 @@ up: ## Accende la workstation con WoL e attende SSH
 
 down: ## Richiede lo shutdown sicuro senza ignorare i blocker
 >python3 scripts/power.py down --env-file $(ENV_FILE)
+
+lock: ## Blocca l'autoshutdown creando un wakelock
+>python3 scripts/wakelock.py lock --env-file $(ENV_FILE)
+
+unlock: ## Riabilita l'autoshutdown rimuovendo il wakelock
+>python3 scripts/wakelock.py unlock --env-file $(ENV_FILE)
+
+lock-status: ## Mostra wakelock, blocker e stato del Power Agent
+>python3 scripts/wakelock.py status --env-file $(ENV_FILE)
 
 install-router: ## Installa o aggiorna il router always-on e systemd
 >python3 installer/install_router.py
