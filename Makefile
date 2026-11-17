@@ -1,55 +1,22 @@
-.PHONY: help test verify-config install update run logs log lint format clean
-
-.DEFAULT_GOAL := help
-
-# Individua l'interprete Python nell'ambiente virtuale se presente
-PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; elif [ -f /opt/litellm-router/.venv/bin/python ]; then echo /opt/litellm-router/.venv/bin/python; else echo python3; fi)
-
-help: ## Mostra questa guida di aiuto
-	@echo "Comandi disponibili:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
-
-test: ## Esegue la suite completa dei test unitari
-	$(PYTHON) -m pytest
-
-verify-config: ## Verifica sul campo se i parametri in .env consentono l'esecuzione dei comandi
-	$(PYTHON) scripts/verify_config.py
-
-install: ## Esegue l'installer interattivo (richiede privilegi root)
-	./scripts/install.sh
-
-update: ## Aggiorna il codice sorgente (git pull), sincronizza le dipendenze e riavvia il servizio
-	git pull
-	$(PYTHON) -m pip install --upgrade pip wheel
-	$(PYTHON) -m pip install -r requirements.txt
-	@if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet litellm-router.service; then \
-		echo "Riavvio del servizio litellm-router.service..."; \
-		systemctl restart litellm-router.service; \
-	fi
-
-run: ## Avvia o riavvia il servizio dell'applicazione
-	@if command -v systemctl >/dev/null 2>&1; then \
-		echo "Avvio/Riavvio del servizio litellm-router.service..."; \
-		systemctl restart litellm-router.service || systemctl start litellm-router.service; \
-		systemctl status litellm-router.service --no-pager; \
-	else \
-		echo "Avvio dell'applicazione tramite uvicorn..."; \
-		$(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8080; \
-	fi
-
-logs: ## Mostra i log in tempo reale del servizio systemd litellm-router
-	journalctl -u litellm-router -f -n 50
-
-log: logs ## Alias per logs
-
-lint: ## Controlla lo stile e la sintassi del codice con Ruff
-	$(PYTHON) -m ruff check app tests scripts
-
-format: ## Formatta il codice e corregge gli errori automatici con Ruff
-	$(PYTHON) -m ruff check --fix app tests scripts
-	$(PYTHON) -m ruff format app tests scripts
-
-clean: ## Rimuove file temporanei e cache di Python/pytest
-	rm -rf .pytest_cache .venv build dist *.egg-info
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
+.PHONY: help setup doctor test test-agent test-installer test-integration-ssh clean
+PYTHON ?= python3
+ARGS ?=
+help:
+	@echo "make setup ARGS='...'"
+	@echo "make doctor ARGS='--host 192.168.1.50'"
+	@echo "make test"
+	@echo "make test-integration-ssh SSH_TEST_HOST=... SSH_TEST_USER=root"
+setup:
+	$(PYTHON) installer/setup.py $(ARGS)
+doctor:
+	$(PYTHON) scripts/doctor.py $(ARGS)
+test: test-agent test-installer
+	$(PYTHON) -m unittest discover -s tests/diagnostics -v
+test-agent:
+	cd agent && PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
+test-installer:
+	$(PYTHON) -m unittest discover -s installer/tests -v
+test-integration-ssh:
+	SSH_TEST_HOST=$(SSH_TEST_HOST) SSH_TEST_USER=$(SSH_TEST_USER) SSH_TEST_PORT=$(or $(SSH_TEST_PORT),22) $(PYTHON) -m unittest tests.integration.test_ssh_install -v
+clean:
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +

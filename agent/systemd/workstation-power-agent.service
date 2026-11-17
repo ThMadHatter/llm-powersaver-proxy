@@ -1,0 +1,15 @@
+[Unit]
+Description=Workstation Power Agent
+After=pve-cluster.service network-online.target
+[Service]
+Type=simple
+ExecStart=/opt/workstation-power-agent/current/bin/workstation-power-agent --config /etc/workstation-power-agent/config.toml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/workstation-power-agent
+RuntimeDirectory=workstation-power-agent
+[Install]
+WantedBy=multi-user.target

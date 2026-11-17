@@ -100,3 +100,40 @@ async def test_proxmox_ensure_started_error(httpx_mock):
     with pytest.raises(ProxmoxError):
         await client.ensure_started()
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_proxmox_ensure_stopped_running(httpx_mock):
+    settings = Settings(
+        _env_file=None,
+        router_api_key="1234567890123456",
+        proxmox_base_url="https://pve.example.com:8006",
+        proxmox_node="node1",
+        proxmox_vm_type="qemu",
+        proxmox_vmid=100,
+        proxmox_token_id="user@pve!token",
+        proxmox_token_secret="secret",
+    )
+    client = ProxmoxClient(settings)
+    httpx_mock.add_response(url=client.status_url, json={"data": {"status": "running"}})
+    httpx_mock.add_response(url=client.shutdown_url, json={"data": "UPID:node1:shutdown"})
+    assert await client.ensure_stopped() is True
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_proxmox_ensure_stopped_already_stopped(httpx_mock):
+    settings = Settings(
+        _env_file=None,
+        router_api_key="1234567890123456",
+        proxmox_base_url="https://pve.example.com:8006",
+        proxmox_node="node1",
+        proxmox_vm_type="qemu",
+        proxmox_vmid=100,
+        proxmox_token_id="user@pve!token",
+        proxmox_token_secret="secret",
+    )
+    client = ProxmoxClient(settings)
+    httpx_mock.add_response(url=client.status_url, json={"data": {"status": "stopped"}})
+    assert await client.ensure_stopped() is False
+    await client.close()

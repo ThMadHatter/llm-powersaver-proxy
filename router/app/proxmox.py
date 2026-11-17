@@ -30,6 +30,13 @@ class ProxmoxClient:
             f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/start"
         )
 
+    @property
+    def shutdown_url(self) -> str:
+        s = self.settings
+        return (
+            f"{s.proxmox_base_url}/api2/json/nodes/{s.proxmox_node}/{s.proxmox_vm_type}/{s.proxmox_vmid}/status/shutdown"
+        )
+
     async def close(self) -> None:
         await self.client.aclose()
 
@@ -47,3 +54,14 @@ class ProxmoxClient:
             return True
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise ProxmoxError(f"Errore API Proxmox: {exc}") from exc
+
+    async def ensure_stopped(self) -> bool:
+        """Richiede uno shutdown ACPI pulito se la VM/CT risulta in esecuzione."""
+        try:
+            if await self.status() == "stopped":
+                return False
+            response = await self.client.post(self.shutdown_url)
+            response.raise_for_status()
+            return True
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise ProxmoxError(f"Errore API Proxmox durante lo spegnimento: {exc}") from exc
