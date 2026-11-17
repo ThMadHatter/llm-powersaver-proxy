@@ -66,7 +66,11 @@ class Doctor:
   self.say('VM LLM stop',f'{vm} stopped')
   c,b=self.api('POST','/shutdown')
   if c not in ('202','0'):raise Error('shutdown HTTP '+c+' '+b)
-  self.wait(False,int(e['POWER_SHUTDOWN_TIMEOUT']),'Poweroff');self.wol();self.wait(True,int(e['POWER_BOOT_TIMEOUT']),'Boot finale')
+  self.wait(False,int(e['POWER_SHUTDOWN_TIMEOUT']),'Poweroff');time.sleep(10);end=time.time()+int(e['POWER_BOOT_TIMEOUT']);attempt=0
+  while time.time()<end and not self.online():
+   attempt+=1;self.wol();print(f'       Boot finale: Magic Packet {attempt}, restano {max(0,int(end-time.time()))}s',flush=True);time.sleep(10)
+  if not self.online():raise Error('Boot finale timeout')
+  self.say('Boot finale','SSH online')
   if self.ssh('systemctl is-active --quiet workstation-power-agent').returncode:raise Error('agent non active dopo boot')
   self.say('Persistenza agent','active dopo reboot');print(f'\nPASS: TUTTE LE FUNZIONI OPERATIVE ({self.ok} controlli)')
 def main():
