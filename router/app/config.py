@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     gaming_mac: str = ""
     gaming_broadcast: str = "255.255.255.255"
     gaming_wol_port: int = 9
+    agent_base_url: str = ""
+    agent_token: str = ""
+    agent_heartbeat_path: str = "/activity/llm"
+    agent_heartbeat_interval: float = 60.0
+    agent_timeout: float = 5.0
+
+    @property
+    def agent_heartbeat_url(self) -> str:
+        return f"{self.agent_base_url.rstrip(chr(47))}{self.agent_heartbeat_path}" if self.agent_base_url else ""
 
     @field_validator("upstream_base_url", "proxmox_base_url")
     @classmethod

@@ -10,6 +10,7 @@ from starlette.background import BackgroundTask
 from starlette.requests import ClientDisconnect
 
 from .config import Settings, get_settings
+from .heartbeat import AgentHeartbeat
 from .proxmox import ProxmoxClient, ProxmoxError
 from .security import verify_router_key
 from .wol import send_wol
@@ -49,8 +50,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
         )
         app.state.proxmox = ProxmoxClient(settings)
+        app.state.agent_http = httpx.AsyncClient(timeout=settings.agent_timeout)
         yield
         await app.state.upstream.aclose()
+        await app.state.agent_http.aclose()
         await app.state.proxmox.close()
 
     app = FastAPI(title="LiteLLM Proxmox Router", version="1.0.0", lifespan=lifespan)
@@ -204,6 +207,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ClientDisconnect:
             raise HTTPException(status_code=499, detail="Client disconnesso durante la lettura del body")
         await ensure_upstream_ready(request)
+        heartbeat = AgentHeartbeat(request.app.state.agent_http, settings.agent_heartbeat_url, settings.agent_token, settings.agent_heartbeat_interval)
+        await heartbeat.start()
         client: httpx.AsyncClient = request.app.state.upstream
         target = f"{settings.upstream_base_url}/" + quote(path, safe="/@:+")
         headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP}
@@ -217,6 +222,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             upstream = await client.send(upstream_request, stream=True)
         except httpx.HTTPError as exc:
+            await heartbeat.stop()
             logger.error("Connessione upstream a %s fallita: %s", target, exc)
             raise HTTPException(status_code=502, detail=f"Connessione upstream fallita: {exc}") from exc
         response_headers = {
@@ -232,11 +238,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except (ClientDisconnect, asyncio.CancelledError):
                 logger.info("Client disconnesso durante lo streaming per %s", target)
 
+        async def _finish():
+            await heartbeat.stop()
+            await upstream.aclose()
+
         return StreamingResponse(
             stream_body(),
             status_code=upstream.status_code,
             headers=response_headers,
-            background=BackgroundTask(upstream.aclose),
+            background=BackgroundTask(_finish),
         )
 
     return app
