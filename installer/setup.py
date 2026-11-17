@@ -8,6 +8,56 @@ def ready(e):return ssh(e,'true',False).returncode==0
 def wol(e):
  x=bytes.fromhex('FF'*6+e['GAMING_MAC'].replace(':','')*16)
  with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1);s.sendto(x,(e['GAMING_BROADCAST'],int(e.get('GAMING_WOL_PORT','9'))))
+def ensure_remote_wol(e):
+ command = r'''set -e
+ETHTOOL="$(command -v ethtool || true)"
+[ -n "$ETHTOOL" ] || { echo "ethtool mancante sul nodo Proxmox" >&2; exit 20; }
+IFACE="$(find /sys/class/net/vmbr0/brif -mindepth 1 -maxdepth 1 -printf "%f\n" 2>/dev/null | head -n1)"
+[ -n "$IFACE" ] || IFACE="$(ip route show default | awk '{print $5; exit}')"
+[ -n "$IFACE" ] || { echo "NIC fisica non individuata" >&2; exit 21; }
+SUPPORT="$($ETHTOOL "$IFACE" | sed -n 's/^[[:space:]]*Supports Wake-on: //p')"
+case "$SUPPORT" in *g*) ;; *) echo "$IFACE non supporta Magic Packet: $SUPPORT" >&2; exit 22;; esac
+install -d /usr/local/sbin
+cat > /usr/local/sbin/powersaver-wol <<EOF
+#!/bin/sh
+$ETHTOOL -s $IFACE wol g
+[ ! -f /sys/class/net/$IFACE/device/power/wakeup ] || echo enabled > /sys/class/net/$IFACE/device/power/wakeup
+EOF
+chmod 0755 /usr/local/sbin/powersaver-wol
+cat > /etc/systemd/system/powersaver-wol.service <<EOF
+[Unit]
+Description=Keep Wake-on-LAN enabled on $IFACE
+After=network-online.target
+Wants=network-online.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/powersaver-wol
+ExecStop=/usr/local/sbin/powersaver-wol
+
+[Install]
+WantedBy=multi-user.target
+EOF
+# Disable known-bad legacy shutdown actions containing "wol d".
+for UNIT in /etc/systemd/system/*.service; do
+ [ -f "$UNIT" ] || continue
+ if grep -Eq 'ExecStop=.*wol d' "$UNIT"; then
+  cp -a "$UNIT" "$UNIT.backup-powersaver"
+  sed -i 's|^ExecStop=.*|ExecStop=/usr/local/sbin/powersaver-wol|' "$UNIT"
+ fi
+done
+systemctl daemon-reload
+systemctl enable --now powersaver-wol.service >/dev/null
+/usr/local/sbin/powersaver-wol
+$ETHTOOL "$IFACE" | grep -E 'Supports Wake-on|Wake-on|Link detected'
+systemctl is-enabled powersaver-wol.service
+systemctl is-active powersaver-wol.service'''
+ result = ssh(e, command, timeout=60)
+ if result.stdout.strip():
+  print(result.stdout.strip(), flush=True)
+
 def remote(port):return f'''#!/bin/bash
 set -euo pipefail
 A=$1;R=$2;B=/opt/workstation-power-agent;D=$B/releases/$R;C=$B/current;P="";[ ! -L "$C" ]||P=$(readlink -f "$C")
@@ -23,6 +73,7 @@ def main():
  else:end=0;print('      SSH gia disponibile',flush=True)
  while end and time.time()<end and not ready(e):print(f'      attesa SSH: {int(end-time.time())}s',flush=True);time.sleep(3)
  if not ready(e):raise SystemExit('SSH non disponibile dopo WoL')
+ print('[4/8] Verifica e persistenza Wake-on-LAN',flush=True);ensure_remote_wol(e)
  print('[5/8] Preparazione bundle',flush=True)
  with tempfile.TemporaryDirectory() as z:
   d=Path(z);shutil.copytree(ROOT/'agent/src',d/'src',ignore=shutil.ignore_patterns('__pycache__','*.pyc'));shutil.copy(ROOT/'agent/systemd/workstation-power-agent.service',d/'service');(d/'token').write_text(token);(d/'config.toml').write_text(f'''gaming_vmid = {e['POWER_GAMING_VMID']}\nllm_vmid = {e['POWER_LLM_VMID']}\ncheck_interval_seconds = 15\nllm_idle_timeout_seconds = 600\nshutdown_grace_seconds = 300\nobserve_only = {str(not a.enable_poweroff).lower()}\nlisten_host = "0.0.0.0"\nlisten_port = {e['AGENT_PORT']}\ntoken_file = "/etc/workstation-power-agent/token"\nstate_dir = "/run/workstation-power-agent"\n''');(d/'install').write_text(remote(e['AGENT_PORT']));arc=d/'bundle.tgz'

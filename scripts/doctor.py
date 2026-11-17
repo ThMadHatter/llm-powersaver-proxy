@@ -21,6 +21,12 @@ class Doctor:
   e=self.e;p=bytes.fromhex('FF'*6+e['GAMING_MAC'].replace(':','')*16)
   with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1);s.sendto(p,(e['GAMING_BROADCAST'],int(e.get('GAMING_WOL_PORT','9'))))
   self.say('WoL','Magic Packet inviato')
+ def wake_until_online(self,timeout,name='Boot finale'):
+  time.sleep(10);end=time.time()+timeout;attempt=0
+  while time.time()<end and not self.online():
+   attempt+=1;self.wol();print(f'       {name}: Magic Packet {attempt}, restano {max(0,int(end-time.time()))}s',flush=True);time.sleep(10)
+  if not self.online():raise Error(name+' timeout')
+  self.say(name,'SSH online')
  def api(self,m,p,auth=True):
   h=f"-H 'Authorization: Bearer {self.e['AGENT_TOKEN']}'" if auth else '';r=self.ssh(f"curl -sS -o /tmp/doctor.body -w '%{{http_code}}' -X {m} {h} http://127.0.0.1:{self.e['AGENT_PORT']}{p}");b=self.ssh('cat /tmp/doctor.body 2>/dev/null||true').stdout.strip();return r.stdout.strip(),b
  def go(self):
@@ -66,11 +72,7 @@ class Doctor:
   self.say('VM LLM stop',f'{vm} stopped')
   c,b=self.api('POST','/shutdown')
   if c not in ('202','0'):raise Error('shutdown HTTP '+c+' '+b)
-  self.wait(False,int(e['POWER_SHUTDOWN_TIMEOUT']),'Poweroff');time.sleep(10);end=time.time()+int(e['POWER_BOOT_TIMEOUT']);attempt=0
-  while time.time()<end and not self.online():
-   attempt+=1;self.wol();print(f'       Boot finale: Magic Packet {attempt}, restano {max(0,int(end-time.time()))}s',flush=True);time.sleep(10)
-  if not self.online():raise Error('Boot finale timeout')
-  self.say('Boot finale','SSH online')
+  self.wait(False,int(e['POWER_SHUTDOWN_TIMEOUT']),'Poweroff');self.wake_until_online(int(e['POWER_BOOT_TIMEOUT']))
   if self.ssh('systemctl is-active --quiet workstation-power-agent').returncode:raise Error('agent non active dopo boot')
   self.say('Persistenza agent','active dopo reboot');print(f'\nPASS: TUTTE LE FUNZIONI OPERATIVE ({self.ok} controlli)')
 def main():

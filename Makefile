@@ -1,5 +1,7 @@
-.PHONY: setup setup-poweroff doctor doctor-quick test clean
+.PHONY: install-router setup setup-poweroff doctor doctor-quick test clean
 ENV_FILE ?= router/.env
+install-router:
+	python3 installer/install_router.py
 setup:
 	python3 installer/setup.py --env-file $(ENV_FILE)
 setup-poweroff:

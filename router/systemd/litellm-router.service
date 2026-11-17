@@ -7,16 +7,16 @@ Wants=network-online.target
 Type=simple
 User=litellm-router
 Group=litellm-router
-WorkingDirectory=/opt/litellm-router
-EnvironmentFile=/opt/litellm-router/.env
-ExecStart=/opt/litellm-router/.venv/bin/uvicorn app.main:app --host ${LISTEN_HOST} --port ${LISTEN_PORT} --workers 1 --proxy-headers --forwarded-allow-ips=*
+WorkingDirectory=/opt/llm-powersaver-proxy/router
+EnvironmentFile=/opt/llm-powersaver-proxy/router/.env
+ExecStart=/opt/llm-powersaver-proxy/router/.venv/bin/uvicorn app.main:app --host ${LISTEN_HOST} --port ${LISTEN_PORT} --workers 1 --proxy-headers --forwarded-allow-ips=*
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/litellm-router
+ReadWritePaths=/opt/llm-powersaver-proxy/router
 
 [Install]
 WantedBy=multi-user.target
