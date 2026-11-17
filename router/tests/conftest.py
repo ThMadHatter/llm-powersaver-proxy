@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+# I test non devono mai caricare router/.env reale.
+os.environ.setdefault("ENV_FILE", "/dev/null")
+
 # Imposta valori di fallback di default per le variabili obbligatorie durante i test
 os.environ.setdefault("ROUTER_API_KEY", "1234567890123456")
 os.environ.setdefault("PROXMOX_TOKEN_ID", "dummy@pve!token")
