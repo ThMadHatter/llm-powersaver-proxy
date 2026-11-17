@@ -1,143 +1,121 @@
-# Workstation Powersaver
+# LLM Powersaver Proxy
 
-Tool minimale per gestire una workstation Proxmox accesa on-demand.
+Sistema semplice per tenere spenta una workstation Proxmox quando non serve, accenderla tramite Wake-on-LAN e rendere trasparente il cold start ai client LiteLLM.
 
-## Cosa fa oggi
+## Componenti
 
-La repository contiene tre elementi:
+- `router/`: proxy FastAPI always-on già esistente. Avvia la VM LLM tramite API Proxmox e invia WoL quando l'host non è raggiungibile.
+- `agent/`: servizio Python installato sull'host Proxmox. VM gaming accesa, heartbeat LLM o wakelock bloccano il poweroff.
+- `installer/setup.py`: wizard remoto con build, WoL, attesa SSH, SCP, installazione systemd, health check e rollback.
+- `scripts/doctor.py`: collaudo end-to-end, incluso un vero ciclo shutdown/WoL.
 
-- `router/`: servizio FastAPI always-on. Espone un proxy OpenAI-compatible, controlla LiteLLM, avvia la VM LLM tramite API Proxmox e invia Wake-on-LAN quando Proxmox non e raggiungibile. L'endpoint manuale WoL attualmente implementato e `POST /gaming/start`.
-- `agent/`: servizio Python installato direttamente sull'host Proxmox. Controlla le VM gaming e LLM tramite `qm status`, riceve heartbeat LLM, gestisce il wakelock e decide se l'host puo essere spento.
-- `installer/`: wizard che costruisce il bundle, usa WoL se necessario, attende SSH, trasferisce con `scp`, installa una release versionata, esegue health check e ripristina la release precedente in caso di errore.
+Non è presente codice legacy Bash.
 
-La repository non include il precedente script Bash di autoshutdown, timer Git o deployment legacy.
+## Unica fonte di configurazione
 
-## Comportamento operativo
+Tutti i comandi leggono `router/.env`. Il wizard aggiunge e aggiorna nello stesso file le variabili `POWER_*` e `AGENT_*`; non stampa un token da copiare altrove.
 
-- VM gaming `running`: spegnimento sempre bloccato.
-- Attivita LLM recente: spegnimento bloccato.
-- Wakelock presente: spegnimento bloccato.
-- Stato di una VM `unknown`: spegnimento bloccato in modo fail-safe.
-- Nessun blocker: trascorsa la grace period, l'agent puo eseguire `systemctl poweroff`.
-
-Per impostazione predefinita il wizard installa l'agent con `observe_only = true`. In questa modalita la decisione viene calcolata ed esposta, ma il poweroff non viene eseguito. Il poweroff reale richiede `--enable-poweroff`.
-
-## Requisiti
-
-### Macchina always-on
-
-- Linux con Python 3.11 o successivo;
-- `ssh` e `scp`;
-- router installato secondo `router/README.md`;
-- chiave SSH non interattiva verso l'host Proxmox.
-
-### Host Proxmox
-
-- Proxmox VE/Debian con Python 3.11 o successivo;
-- `qm`, `systemctl`, `curl` e `tar`;
-- accesso SSH root nella baseline corrente;
-- VMID gaming e LLM validi.
-
-## Installazione dell'agent
+Partire da:
 
 ```bash
-make setup ARGS="\
-  --host 192.168.1.50 \
-  --ssh-user root \
-  --mac AA:BB:CC:DD:EE:FF \
-  --broadcast 192.168.1.255 \
-  --gaming-vmid 100 \
-  --llm-vmid 101 \
-  --yes"
+cp router/.env.example router/.env
+chmod 600 router/.env
 ```
 
-Il wizard installa:
+Compilare le variabili esistenti del router. Per il power management servono anche:
+
+```dotenv
+POWER_HOST=192.168.1.85
+POWER_SSH_USER=root
+POWER_SSH_PORT=22
+POWER_GAMING_VMID=100
+POWER_LLM_VMID=101
+AGENT_PORT=8765
+AGENT_TOKEN=
+POWER_BOOT_TIMEOUT=180
+POWER_SHUTDOWN_TIMEOUT=120
+POWER_CYCLE_TEST=false
+```
+
+`POWER_HOST` è facoltativo prima del primo setup: il wizard lo ricava da `PROXMOX_BASE_URL`. Se `AGENT_TOKEN` è vuoto, il wizard lo genera e lo salva nel `.env`.
+
+## Installazione
+
+Prima installazione sicura, senza poweroff automatico:
+
+```bash
+make setup
+```
+
+Installazione con poweroff automatico abilitato:
+
+```bash
+make setup-poweroff
+```
+
+Il wizard:
+
+1. legge esclusivamente `router/.env`;
+2. completa `POWER_HOST`, VMID, porta, timeout e token;
+3. prova SSH e invia WoL se necessario;
+4. attende il boot;
+5. trasferisce il bundle con SCP;
+6. installa una release in `/opt/workstation-power-agent/releases/`;
+7. aggiorna atomicamente il symlink `current`;
+8. configura e avvia `workstation-power-agent.service`;
+9. verifica `/health`;
+10. ripristina la release precedente se l'installazione fallisce.
+
+## Diagnostica completa
+
+Il doctor è deliberatamente un collaudo funzionale distruttivo. Per autorizzarlo impostare nel `.env`:
+
+```dotenv
+POWER_CYCLE_TEST=true
+```
+
+Poi eseguire un solo comando:
+
+```bash
+make doctor
+```
+
+Il collaudo verifica realmente:
+
+- completezza del `.env`;
+- servizio e liveness del router;
+- WoL e attesa SSH, se la workstation è spenta;
+- comandi remoti `python3`, `qm`, `systemctl`, `curl`, `tar`;
+- agent systemd enabled/active;
+- `/health`, `/status` e autenticazione 401;
+- creazione del wakelock e relativo blocker;
+- rimozione del wakelock;
+- heartbeat LLM e relativo blocker;
+- lettura delle VM gaming/LLM con `qm status`;
+- richiesta di shutdown sicuro;
+- reale scomparsa dell'host da SSH;
+- secondo Wake-on-LAN dopo il poweroff;
+- boot finale e riavvio automatico dell'agent.
+
+Successo finale:
 
 ```text
-/opt/workstation-power-agent/releases/<timestamp>
-/opt/workstation-power-agent/current
-/etc/workstation-power-agent/config.toml
-/etc/workstation-power-agent/token
-/etc/systemd/system/workstation-power-agent.service
+Outcome: TUTTE LE FUNZIONI VERIFICATE
 ```
 
-Per abilitare lo spegnimento reale, ripetere il setup aggiungendo:
+### Precondizione per il test di shutdown
 
-```bash
---enable-poweroff
-```
+Le VM gaming e LLM devono essere spente e non devono esserci attività LLM o wakelock. `/shutdown` è fail-safe: risponde HTTP 409 anziché spegnere l'host se rileva un blocker. Il doctor rimuove solo i marker creati dal test; non forza lo spegnimento delle VM.
 
 ## API agent
 
-Porta predefinita: `8765`.
+- `GET /health`, senza token;
+- `GET /status`, Bearer token;
+- `POST /activity/llm`, Bearer token;
+- `POST /wakelock`, Bearer token;
+- `DELETE /wakelock`, Bearer token;
+- `POST /shutdown`, Bearer token, eseguito solo senza blocker reali.
 
-| Metodo | Endpoint | Autenticazione | Funzione |
-|---|---|---|---|
-| GET | `/health` | No | Health check |
-| GET | `/status` | Bearer token | Stato VM, blocker e modalita osservazione |
-| POST | `/activity/llm` | Bearer token | Rinnova l'attivita LLM |
-| POST | `/wakelock` | Bearer token | Crea il wakelock |
+## Test non coperti dal doctor
 
-Il token si trova sull'host in `/etc/workstation-power-agent/token` con permessi `0600`.
-
-## Diagnostica con un singolo comando
-
-Dalla root della repository sulla macchina always-on:
-
-```bash
-make doctor ARGS="--host 192.168.1.50 --ssh-user root"
-```
-
-Se la configurazione router non e in `/opt/litellm-router/.env`:
-
-```bash
-make doctor ARGS="\
-  --env-file router/.env \
-  --host 192.168.1.50 \
-  --ssh-user root"
-```
-
-La checklist verifica:
-
-1. presenza delle variabili essenziali del router;
-2. validita della configurazione Wake-on-LAN;
-3. servizio `litellm-router.service` attivo;
-4. `/health/live` del router;
-5. `/health/ready` del router;
-6. accesso SSH all'host Proxmox;
-7. presenza di Python, `qm`, `systemctl`, `curl` e `tar`;
-8. agent systemd `enabled` e `active`;
-9. token agent;
-10. `/health` e `/status` dell'agent;
-11. visibilita delle VM 100 e 101;
-12. rifiuto HTTP 401 senza token.
-
-`/health/ready` puo restituire HTTP 503 quando la workstation o LiteLLM sono spenti. Per il modello on-demand viene riportato come `WARN`, non come guasto. Il comando termina con codice `1` se esiste almeno un `FAIL`. Con `--strict`, anche `WARN` e `SKIP` producono codice `2`.
-
-Il check WoL e configurativo: non spegne la workstation per provare un'accensione reale. Il test end-to-end del WoL va eseguito deliberatamente a host spento con il wizard o con l'endpoint `POST /gaming/start`.
-
-## Test
-
-Test locali:
-
-```bash
-make test
-```
-
-Test d'integrazione su un host reale, sempre in `observe_only=true`:
-
-```bash
-make test-integration-ssh \
-  SSH_TEST_HOST=192.168.1.50 \
-  SSH_TEST_USER=root
-```
-
-La suite SSH verifica installazione, systemd, API autenticata, aggiornamento e rollback. La porta di test predefinita e `18765`.
-
-## Limiti attuali
-
-- Il router non invia ancora automaticamente l'heartbeat a `POST /activity/llm`.
-- Il router mantiene ancora il nome endpoint `POST /gaming/start`, non `/power/wake`.
-- Il wizard stampa il token dopo l'installazione, ma non lo inserisce automaticamente nella configurazione del router.
-- Non viene configurato automaticamente il firewall della porta `8765`.
-- L'API agent implementa la creazione del wakelock, ma non ancora la sua rimozione via `DELETE`.
+Il doctor non invia una richiesta di inferenza reale a un modello perché modello, payload e credenziali LiteLLM sono deployment-specific. Verifica però router, host, agent, WoL, policy e power cycle. Un test modello può essere aggiunto successivamente usando variabili `DOCTOR_MODEL` e un prompt minimo.
