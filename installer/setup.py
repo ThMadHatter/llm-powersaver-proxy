@@ -17,20 +17,40 @@ mkdir -p "$D/bin" /etc/workstation-power-agent;tar -xzf "$A" -C "$D";install -m6
 printf '#!/bin/bash\nHERE=$(cd "$(dirname "$0")/.." && pwd);export PYTHONPATH="$HERE/src";exec python3 -m workstation_power_agent.main "$@"\n' >"$D/bin/workstation-power-agent";chmod +x "$D/bin/workstation-power-agent";ln -sfn "$D" "$C";systemctl daemon-reload;systemctl enable --now workstation-power-agent
 for i in $(seq 1 30);do curl -fsS http://127.0.0.1:{port}/health&&trap - ERR&&exit 0;sleep 1;done;exit 1
 '''
+def log(message): print(message,flush=True)
 def main():
+ log('[1/8] Lettura configurazione router/.env')
  p=argparse.ArgumentParser();p.add_argument('--env-file',default='router/.env');p.add_argument('--enable-poweroff',action='store_true');a=p.parse_args();e=load(a.env_file)
  host=e.get('POWER_HOST') or urllib.parse.urlparse(e['PROXMOX_BASE_URL']).hostname; token=e.get('AGENT_TOKEN') or secrets.token_urlsafe(32)
+ log(f'[2/8] Target SSH: {host}')
  changes={'POWER_HOST':host,'POWER_SSH_USER':e.get('POWER_SSH_USER','root'),'POWER_SSH_PORT':e.get('POWER_SSH_PORT','22'),'POWER_GAMING_VMID':e.get('POWER_GAMING_VMID','100'),'POWER_LLM_VMID':e.get('POWER_LLM_VMID',e.get('PROXMOX_VMID','101')),'AGENT_PORT':e.get('AGENT_PORT','8765'),'AGENT_TOKEN':token,'POWER_BOOT_TIMEOUT':e.get('POWER_BOOT_TIMEOUT','180'),'POWER_SHUTDOWN_TIMEOUT':e.get('POWER_SHUTDOWN_TIMEOUT','120')};update(a.env_file,changes);e.update(changes)
- if not ready(e):wol(e['GAMING_MAC'],e.get('GAMING_BROADCAST','255.255.255.255'),int(e.get('GAMING_WOL_PORT','9')));end=time.time()+int(e['POWER_BOOT_TIMEOUT']);
- else:end=0
- while end and time.time()<end and not ready(e):time.sleep(3)
+ log('[3/8] Verifica SSH iniziale')
+ if not ready(e):
+  log('[4/8] SSH offline: invio Wake-on-LAN')
+  wol(e['GAMING_MAC'],e.get('GAMING_BROADCAST','255.255.255.255'),int(e.get('GAMING_WOL_PORT','9')));end=time.time()+int(e['POWER_BOOT_TIMEOUT']);
+ else:
+  log('      SSH gia disponibile; WoL non necessario');end=0
+ attempt=0
+ while end and time.time()<end and not ready(e):
+  attempt+=1;log(f"      attesa SSH: tentativo {attempt}, restano {max(0,int(end-time.time()))}s");time.sleep(3)
  if not ready(e):raise SystemExit('SSH non disponibile dopo WoL')
+ log('[5/8] SSH disponibile: preparazione bundle agent')
  with tempfile.TemporaryDirectory() as z:
   d=Path(z);shutil.copytree(ROOT/'agent/src',d/'src');shutil.copy(ROOT/'agent/systemd/workstation-power-agent.service',d/'service');(d/'token').write_text(token);(d/'config.toml').write_text(f'''gaming_vmid = {e['POWER_GAMING_VMID']}\nllm_vmid = {e['POWER_LLM_VMID']}\ncheck_interval_seconds = 15\nllm_idle_timeout_seconds = 600\nshutdown_grace_seconds = 300\nobserve_only = {str(not a.enable_poweroff).lower()}\nlisten_host = "0.0.0.0"\nlisten_port = {e['AGENT_PORT']}\ntoken_file = "/etc/workstation-power-agent/token"\nstate_dir = "/run/workstation-power-agent"\n''');(d/'install').write_text(remote_script(e['AGENT_PORT']))
   arc=d/'bundle.tgz'
   with tarfile.open(arc,'w:gz') as t:
    for f in d.iterdir():
     if f!=arc:t.add(f,arcname=f.name)
-  run(['scp','-P',e['POWER_SSH_PORT'],str(arc),f"{e['POWER_SSH_USER']}@{host}:/tmp/wpa.tgz"]);ssh(e,f'tar -xOf /tmp/wpa.tgz install >/tmp/wpa-install&&chmod +x /tmp/wpa-install&&/tmp/wpa-install /tmp/wpa.tgz {int(time.time())}',timeout=180)
- print(f'Installazione completata; configurazione aggiornata in {a.env_file}')
-if __name__=='__main__':main()
+  log(f'      bundle creato: {arc.stat().st_size} byte')
+  log('[6/8] Trasferimento bundle con SCP, timeout 120s')
+  run(['scp','-P',e['POWER_SSH_PORT'],str(arc),f"{e['POWER_SSH_USER']}@{host}:/tmp/wpa.tgz"],timeout=120)
+  log('[7/8] Installazione remota e health check, timeout 180s')
+  result=ssh(e,f'tar -xOf /tmp/wpa.tgz install >/tmp/wpa-install&&chmod +x /tmp/wpa-install&&/tmp/wpa-install /tmp/wpa.tgz {int(time.time())}',timeout=180)
+  if result.stdout.strip():log('      '+result.stdout.strip().replace('\n',' | '))
+  if result.stderr.strip():log('      '+result.stderr.strip().replace('\n',' | '))
+ log(f'[8/8] Installazione completata; configurazione aggiornata in {a.env_file}')
+if __name__=='__main__':
+ try:main()
+ except subprocess.TimeoutExpired as exc:raise SystemExit(f'Timeout comando: {exc.cmd}') from exc
+ except subprocess.CalledProcessError as exc:
+  print(exc.stdout or '',flush=True);print(exc.stderr or '',file=sys.stderr,flush=True);raise SystemExit(f'Comando fallito, exit code {exc.returncode}') from exc

@@ -119,3 +119,7 @@ Le VM gaming e LLM devono essere spente e non devono esserci attività LLM o wak
 ## Test non coperti dal doctor
 
 Il doctor non invia una richiesta di inferenza reale a un modello perché modello, payload e credenziali LiteLLM sono deployment-specific. Verifica però router, host, agent, WoL, policy e power cycle. Un test modello può essere aggiunto successivamente usando variabili `DOCTOR_MODEL` e un prompt minimo.
+
+### Output del wizard
+
+Il wizard stampa immediatamente le otto fasi: lettura `.env`, target SSH, verifica SSH, eventuale WoL, attesa boot con tentativi e secondi residui, creazione/trasferimento bundle, installazione remota e risultato finale. SCP e installazione remota hanno timeout espliciti rispettivamente di 120 e 180 secondi.
