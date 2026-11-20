@@ -93,6 +93,8 @@ class PowerController:
             f"UserKnownHostsFile={self._s.ssh_known_hosts}",
             "-o",
             "StrictHostKeyChecking=yes",
+            "-o",
+            "HostKeyAlgorithms=ssh-ed25519,ssh-rsa,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384",
             f"{self._s.power_ssh_user}@{self._s.power_host}",
             remote,
         ]
@@ -100,7 +102,10 @@ class PowerController:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=env)
         line = (out.stdout + out.stderr).strip().splitlines()[-1] if (out.stdout + out.stderr).strip() else ""
         if not line.startswith("HTTP "):
-            raise RuntimeError(f"power agent non raggiungibile: {line[:120] or out.returncode}")
+            detail = (line[:120] or f"rc={out.returncode}")
+            if out.stderr:
+                detail += " | ssh: " + out.stderr.strip().replace("\n", " ")[-200:]
+            raise RuntimeError(f"power agent non raggiungibile: {detail}")
         parts = line.split(" ", 2)
         code = parts[1] if len(parts) > 1 else ""
         body = parts[2] if len(parts) > 2 else ""
