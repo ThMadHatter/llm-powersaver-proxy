@@ -3,7 +3,7 @@
 
 ENV_FILE ?= router/.env
 
-.PHONY: help up down lock unlock lock-status install-router setup setup-poweroff doctor doctor-quick test test-router test-doctor clean
+.PHONY: help up down lock unlock lock-status logs install-router setup setup-poweroff doctor doctor-quick test test-router test-doctor clean
 
 help: ## Mostra questo elenco di comandi
 >@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,6 +22,9 @@ unlock: ## Riabilita l'autoshutdown rimuovendo il wakelock
 
 lock-status: ## Mostra wakelock, blocker e stato del Power Agent
 >python3 scripts/wakelock.py status --env-file $(ENV_FILE)
+
+logs: ## Segue insieme i log del router e del Power Agent
+>ENV_FILE=$(ENV_FILE) scripts/logs.sh
 
 install-router: ## Installa o aggiorna il router always-on e systemd
 >python3 installer/install_router.py

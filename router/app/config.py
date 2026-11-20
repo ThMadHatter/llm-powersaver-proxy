@@ -54,6 +54,22 @@ class Settings(BaseSettings):
     agent_heartbeat_interval: float = 60.0
     agent_timeout: float = 5.0
 
+    # Power Agent (Workstation) via ssh, used by app/mqtt_stats.py
+    power_host: str = ""
+    power_ssh_user: str = "root"
+    power_ssh_port: int = 22
+    power_workdir: str = "/opt/llm-powersaver-proxy"
+    agent_port: int = 8765
+
+    # Home Assistant MQTT discovery (stats + wakelock). Empty MQTT_HOST disables it.
+    mqtt_host: str = ""
+    mqtt_port: int = 1883
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+    mqtt_stats_topic_prefix: str = "home/llm_router"
+    mqtt_stats_entity_prefix: str = "llm_router"
+    mqtt_stats_poll_seconds: float = 15.0
+
     @property
     def agent_heartbeat_url(self) -> str:
         return f"{self.agent_base_url.rstrip(chr(47))}{self.agent_heartbeat_path}" if self.agent_base_url else ""
