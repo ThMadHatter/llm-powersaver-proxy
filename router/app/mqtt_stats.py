@@ -282,8 +282,13 @@ class HomeAssistantStats:
         result = self._power.make(entry[0])
         logger.info("azione %s (%s): %s", entry[0], entry[1], "ok" if result.ok else result.detail)
 
-    def _on_connect(self, client: Any, _user: Any, _flags: Any, rc: int, _props: Any = None) -> None:
-        if rc:
+    def _on_connect(self, client: Any, _user: Any, _flags: Any, rc: Any, _props: Any = None) -> None:
+        # paho 2.x passa il result code (int o enum): 0 = successo.
+        try:
+            code = int(getattr(rc, "value", rc))
+        except (TypeError, ValueError):
+            code = 0
+        if code != 0:
             logger.warning("MQTT connessione fallita rc=%s", rc)
             return
         client.subscribe(self._topic("lock", "set"), qos=1)
