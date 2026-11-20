@@ -153,6 +153,7 @@ class HomeAssistantStats:
             client_id=f"litellm-router-{settings.mqtt_stats_entity_prefix}",
         )
         self._client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
+        self._disc_n = 0
         self._client.will_set(f"{self._prefix}/availability", AVAILABILITY_OFFLINE, qos=1, retain=True)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
@@ -259,6 +260,11 @@ class HomeAssistantStats:
             return False, str(exc)[:120]
 
     async def poll_once(self) -> None:
+        self._disc_n += 1
+        if self._disc_n % 4 == 0:
+            # Home Assistant connects with a clean session: it does not receive
+            # retained payloads, so re-publish discovery every ~4 polls.
+            self._publish_discovery()
         ok, detail = await self._router_health()
         self._publish_sensor("router_state", "online" if ok else "offline")
         self._publish_sensor("upstream_state", detail or ("ready" if ok else "unreachable"))
