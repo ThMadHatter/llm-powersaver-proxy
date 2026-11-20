@@ -89,10 +89,15 @@ class PowerController:
             "BatchMode=yes",
             "-o",
             "ConnectTimeout=5",
+            "-o",
+            f"UserKnownHostsFile={self._s.ssh_known_hosts}",
+            "-o",
+            "StrictHostKeyChecking=yes",
             f"{self._s.power_ssh_user}@{self._s.power_host}",
             remote,
         ]
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        env = {"HOME": self._s.ssh_home, "PATH": "/usr/bin:/bin", "LANG": "C"}
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=env)
         line = (out.stdout + out.stderr).strip().splitlines()[-1] if (out.stdout + out.stderr).strip() else ""
         if not line.startswith("HTTP "):
             raise RuntimeError(f"power agent non raggiungibile: {line[:120] or out.returncode}")
