@@ -11,6 +11,7 @@ from starlette.requests import ClientDisconnect
 
 from .config import Settings, get_settings
 from .heartbeat import AgentHeartbeat
+from .mqtt_stats import build as build_mqtt_stats
 from .proxmox import ProxmoxClient, ProxmoxError
 from .security import verify_router_key
 from .wol import send_wol
@@ -50,11 +51,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
         )
         app.state.proxmox = ProxmoxClient(settings)
+        app.state.mqtt_stats = build_mqtt_stats(settings, settings.power_workdir)
+        if app.state.mqtt_stats is not None:
+            await app.state.mqtt_stats.start()
         app.state.agent_http = httpx.AsyncClient(timeout=settings.agent_timeout)
         yield
         await app.state.upstream.aclose()
         await app.state.agent_http.aclose()
         await app.state.proxmox.close()
+        if getattr(app.state, 'mqtt_stats', None) is not None:
+            await app.state.mqtt_stats.stop()
 
     app = FastAPI(title="LiteLLM Proxmox Router", version="1.0.0", lifespan=lifespan)
 
