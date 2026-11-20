@@ -95,6 +95,10 @@ class PowerController:
             "StrictHostKeyChecking=yes",
             "-o",
             "HostKeyAlgorithms=ssh-ed25519,ssh-rsa,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384",
+            "-i",
+            self._s.ssh_identity,
+            "-o",
+            "IdentitiesOnly=yes",
             f"{self._s.power_ssh_user}@{self._s.power_host}",
             remote,
         ]
@@ -104,7 +108,11 @@ class PowerController:
         if not line.startswith("HTTP "):
             detail = (line[:120] or f"rc={out.returncode}")
             if out.stderr:
-                detail += " | ssh: " + out.stderr.strip().replace("\n", " ")[-200:]
+                detail += " | ssh: " + out.stderr.strip().replace("\n", " ")[-240:]
+            detail += " | cmd: " + " ".join(cmd)[:240]
+            detail += " | env: " + json.dumps({k: v for k, v in env.items()})[:120]
+            detail += " | sshv: " + out.stderr.strip().replace("\n", " | ")[-400:]
+            detail += " | kh: " + open(self._s.ssh_known_hosts, "rb").read().count(b"192.168.1.85").__str__()
             raise RuntimeError(f"power agent non raggiungibile: {detail}")
         parts = line.split(" ", 2)
         code = parts[1] if len(parts) > 1 else ""

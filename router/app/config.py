@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     power_ssh_port: int = 22
     ssh_home: str = "/root"
     ssh_known_hosts: str = "/root/.ssh/known_hosts"
+    ssh_identity: str = "/root/.ssh/id_ed25519"
     power_workdir: str = "/opt/llm-powersaver-proxy"
     agent_port: int = 8765
 
