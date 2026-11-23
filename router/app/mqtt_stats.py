@@ -20,9 +20,11 @@ import asyncio
 import json
 import logging
 import shutil
+import sys
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -125,16 +127,26 @@ class PowerController:
         return self.agent_request("GET", "/status").get("state", {})
 
     def make(self, target: str) -> PowerResult:
-        if target not in {"lock", "unlock", "up", "down"}:
+        """Esegue gli stessi script del Makefile con l'interprete dell'app.
+
+        `make` dentro systemd non è affidabile (environment pulito): chiamiamo
+        gli script direttamente con lo stesso interprete del servizio.
+        """
+        scripts = {"lock": "wakelock.py", "unlock": "wakelock.py", "up": "power.py", "down": "power.py"}
+        if target not in scripts:
             return PowerResult(False, f"target non consentito: {target}")
-        if shutil.which("make") is None:
-            return PowerResult(False, "make non disponibile")
+        script = Path(self._workdir) / "scripts" / scripts[target]
+        args = [target]
+        if scripts[target] == "wakelock.py":
+            args += ["--env-file", str(Path(self._workdir) / "router" / ".env")]
         res = subprocess.run(
-            ["make", target, "-C", self._workdir],
+            [sys.executable, str(script), *args],
             capture_output=True,
             text=True,
             timeout=240,
             check=False,
+            cwd=self._workdir,
+            env={"HOME": self._s.ssh_home, "PATH": "/usr/bin:/bin", "LANG": "C"},
         )
         detail = (res.stdout + res.stderr).strip().splitlines()[-1:] or [""]
         return PowerResult(res.returncode == 0, detail[0][:200])
@@ -225,7 +237,20 @@ class HomeAssistantStats:
                 f"{self._entity}_vm_gaming_attiva",
                 f"Router ({self._entity}) VM Gaming Attiva",
                 {**base, "state_topic": self._topic("binary_sensor", "gaming_state"),
+                 "payload_on": "ON",
+                 "payload_off": "OFF",
                  "device_class": "running"},
+            )
+            self._discovery(
+                "button",
+                f"{self._entity}_accensione_gaming",
+                "Router Avvio Gaming",
+                {**base,
+                 "object_id": None,  # non ammesso nello schema button di HA 2026
+                 "command_topic": self._topic("power", "set"),
+                 "payload_press": "UP",
+                 "qos": 1,
+                 "icon": "mdi:power"},
             )
             self._discovery(
                 "lock",
@@ -260,6 +285,7 @@ class HomeAssistantStats:
             return False, str(exc)[:120]
 
     async def poll_once(self) -> None:
+        self._publish(f"{self._prefix}/availability", AVAILABILITY_ONLINE)
         self._disc_n += 1
         if self._disc_n % 4 == 0:
             # Home Assistant connects with a clean session: it does not receive
@@ -283,7 +309,7 @@ class HomeAssistantStats:
         )
         self._publish(
             self._topic("binary_sensor", "gaming_state"),
-            "on" if state.get("gaming_vm") == "running" else "off",
+            "ON" if state.get("gaming_vm") == "running" else "OFF",
         )
         self._publish_sensor("power_state", json.dumps(state, ensure_ascii=False))
 

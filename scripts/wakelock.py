@@ -10,6 +10,12 @@ from envfile import load
 
 
 def ssh(env, command):
+    opts = [
+        "-o", f"UserKnownHostsFile={env.get('SSH_KNOWN_HOSTS', '/root/.ssh/known_hosts')}",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "IdentitiesOnly=yes",
+        "-i", env.get("SSH_IDENTITY", "/root/.ssh/id_ed25519"),
+    ]
     return subprocess.run(
         [
             "ssh",
@@ -19,6 +25,7 @@ def ssh(env, command):
             "BatchMode=yes",
             "-o",
             "ConnectTimeout=5",
+            *opts,
             f"{env.get('POWER_SSH_USER', 'root')}@{env['POWER_HOST']}",
             command,
         ],
